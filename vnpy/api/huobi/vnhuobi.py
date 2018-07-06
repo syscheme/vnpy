@@ -9,14 +9,14 @@ import traceback
 from copy import copy
 from datetime import datetime
 from threading import Thread
-from queue import Queue, Empty
+from Queue import Queue, Empty
 from multiprocessing.dummy import Pool
 from time import sleep
 
 import json
 import zlib
-from websocket import create_connection, _exceptions
-
+# from websocket import create_connection, _exceptions
+import websocket
 
 # 常量定义
 TIMEOUT = 5
@@ -94,7 +94,11 @@ class TradeApi(object):
         if mode:
             self.mode = mode
             
-        self.proxies = {}
+        self.proxies = {
+              "http"  : "http://localhost:8118/", 
+              "https" : "http://localhost:8118/"
+        }
+
         
         return True
         
@@ -121,7 +125,7 @@ class TradeApi(object):
         postdata = urllib.urlencode(params)
         
         try:
-            response = requests.get(url, postdata, headers=headers, timeout=TIMEOUT)
+            response = requests.get(url, postdata, headers=headers, proxies=self.proxies, timeout=TIMEOUT)
             if response.status_code == 200:
                 return True, response.json()
             else:
@@ -136,7 +140,7 @@ class TradeApi(object):
         postdata = json.dumps(params)
         
         try:
-            response = requests.post(url, postdata, headers=headers, timeout=TIMEOUT)
+            response = requests.post(url, postdata, headers=headers, proxies=self.proxies, timeout=TIMEOUT)
             if response.status_code == 200:
                 return True, response.json()
             else:
@@ -532,11 +536,10 @@ class DataApi(object):
         """重连"""
         try:
             if not self.proxyHost:
-                self.ws = create_connection(self.url)
+                self.ws = websocket.connect(self.url, http_proxy_host="localhost", http_proxy_port=8118, ssl=ssl.SSLContext(protocol=ssl.PROTOCOL_TLS)) # create_connection(self.url)
             else:
-                self.ws = create_connection(self.url, 
-                                            http_proxy_host=self.proxyHost, 
-                                            http_proxy_port=self.proxyPort)
+                self.ws = websocket.connect(self.url, http_proxy_host="localhost", http_proxy_port=8118, ssl=ssl.SSLContext(protocol=ssl.PROTOCOL_TLS)) # create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
+
             return True
         except:
             msg = traceback.format_exc()
@@ -557,14 +560,13 @@ class DataApi(object):
         self.url = url
         self.proxyHost = proxyHost
         self.proxyPort = proxyPort
-        
+
         try:
+            self.ws = websocket.WebSocket()
             if not self.proxyHost:
-                self.ws = create_connection(self.url)
+                self.ws.connect(self.url) # create_connection(self.url)
             else:
-                self.ws = create_connection(self.url, 
-                                            http_proxy_host=self.proxyHost, 
-                                            http_proxy_port=self.proxyPort)
+                self.ws.connect(self.url,http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort) # create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
             
             self.active = True
             self.thread.start()

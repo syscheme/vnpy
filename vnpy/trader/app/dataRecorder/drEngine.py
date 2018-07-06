@@ -30,7 +30,7 @@ from .language import text
 ########################################################################
 class DrEngine(object):
     """数据记录引擎"""
-    
+     
     settingFileName = 'DR_setting.json'
     settingFilePath = getJsonPath(settingFileName, __file__)  
 

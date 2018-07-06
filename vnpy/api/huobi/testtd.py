@@ -5,8 +5,8 @@ from vnhuobi import *
 #----------------------------------------------------------------------
 def testTrade():
     """测试交易"""
-    accessKey = ''
-    secretKey = ''
+    accessKey = '440750e1-3465375f-0fb446e2-3bce5'
+    secretKey = 'bc3a5245-532d4f50-51f15cdd-b18e0'
     
     # 创建API对象并初始化
     api = TradeApi()

@@ -44,8 +44,7 @@ def downloadEquityDailyBarts(self, symbol):
     
     if not data.empty:
         # 创建datetime索引
-        self.dbClient[DAILY_DB_NAME][symbol].ensure_index([('datetime', pymongo.ASCENDING)], 
-                                                            unique=True)                
+        self.dbClient[DAILY_DB_NAME][symbol].ensure_index([('datetime', pymongo.ASCENDING)], unique=True)
         
         for index, d in data.iterrows():
             bar = VtBarData()

@@ -52,7 +52,7 @@ from vnhuobi import DataApi
 
 
 api = DataApi()
-api.connect("wss://api.huobipro.com/ws")
+api.connect("wss://api.huobipro.com/ws", proxyHost='lcoalhost', proxyPort=8118)
 api.subscribeMarketDepth('ethusdt')
 #api.subscribeTradeDetail('ethusdt')
 #api.subscribeMarketDetail('ethusdt')
