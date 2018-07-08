@@ -5,19 +5,29 @@ from vnhuobi import *
 #----------------------------------------------------------------------
 def testTrade():
     """测试交易"""
-    accessKey = '440750e1-3465375f-0fb446e2-3bce5'
-    secretKey = 'bc3a5245-532d4f50-51f15cdd-b18e0'
-    
+    try:
+        f = file('vnpy/trader/gateway/huobiGateway/HUOBI_connect.json')
+    except IOError:
+        return
+        
+    # 解析json文件
+    setting = json.load(f)
+    try:
+        accessKey = str(setting['accessKey'])
+        secretKey = str(setting['secretKey'])
+    except KeyError:
+        return            
+   
     # 创建API对象并初始化
     api = TradeApi()
     
     api.init(api.HADAX, accessKey, secretKey, mode=api.SYNC_MODE)
     api.start()
-    
+
     # 查询
-    print api.getSymbols()
-    print api.getCurrencys()
-    print api.getTimestamp()
+    print (api.getSymbols())
+    print (api.getCurrencys())
+    print (api.getTimestamp())
     
     
     #accountid = ''
@@ -27,7 +37,7 @@ def testTrade():
     #api.getAccountBalance(accountid)
     #api.getOrders(symbol, 'pre-submitted,submitted,partial-filled,partial-canceled,filled,canceled')
     #api.getOrders(symbol, 'filled')
-    print api.getMatchResults(symbol)
+    print (api.getMatchResults(symbol))
     
     #api.getOrder('2440401255')
     #api.getMatchResult('2440401255')
