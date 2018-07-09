@@ -15,8 +15,7 @@ from time import sleep
 
 import json
 import zlib
-from websocket import create_connection, _exceptions
-# import websockets
+from websocket import create_connection, _exceptions # retrieve package: sudo pip install websocket-client pathlib
 
 # 常量定义
 TIMEOUT = 5
@@ -582,7 +581,7 @@ class DataApi(object):
                 self.ws = create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
             else :
                 self.ws = create_connection(self.url)
-                
+
             self._resubscribe()
 
             return True
