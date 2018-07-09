@@ -95,8 +95,8 @@ class TradeApi(object):
             self.mode = mode
             
         self.proxies = {
-              "http"  : "http://localhost:8118/", 
-              "https" : "http://localhost:8118/"
+#              "http"  : "http://localhost:8118/", 
+#              "https" : "http://localhost:8118/"
         }
 
         
@@ -170,6 +170,7 @@ class TradeApi(object):
         params['Signature'] = createSign(params, method, self.hostname, path, self.secretKey)
         
         url = self.hosturl + path
+        #print("url=%s, param:%s" % (url, params))
         
         return self.httpGet(url, params)
     
@@ -316,6 +317,33 @@ class TradeApi(object):
         callback = self.onGetOrders
     
         return self.addReq(path, params, func, callback)     
+
+    #----------------------------------------------------------------------
+    def getOpenOrders(self, accountId=None, symbol=None, side=None, size=None):
+        """查询当前帐号下未成交订单
+            “account_id” 和 “symbol” 需同时指定或者二者都不指定。如果二者都不指定，返回最多500条尚未成交订单，按订单号降序排列。
+        """
+        path = '/v1/order/openOrders'
+        
+        params = { # initial with default required params
+            #'account_id': accountId,
+            #'symbol': symbol,
+        }
+        
+        if symbol:
+            params['symbol'] = symbol
+            params['account_id'] = accountId
+
+        if side:
+            params['side'] = side
+
+        if size:
+            params['size'] = size        
+    
+        func = self.apiGet
+        callback = self.onGetOrders
+    
+        return self.addReq(path, params, func, callback)     
     
     #----------------------------------------------------------------------
     def getMatchResults(self, symbol, types=None, startDate=None, 
@@ -423,71 +451,71 @@ class TradeApi(object):
     #----------------------------------------------------------------------
     def onError(self, msg, reqid):
         """错误回调"""
-        print msg, reqid
+        print(msg, reqid)
         
     #----------------------------------------------------------------------
     def onGetSymbols(self, data, reqid):
         """查询代码回调"""
         #print reqid, data 
         for d in data:
-            print d
+            print(d)
     
     #----------------------------------------------------------------------
     def onGetCurrencys(self, data, reqid):
         """查询货币回调"""
-        print reqid, data        
+        print (reqid, data)
     
     #----------------------------------------------------------------------
     def onGetTimestamp(self, data, reqid):
         """查询时间回调"""
-        print reqid, data    
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onGetAccounts(self, data, reqid):
         """查询账户回调"""
-        print reqid, data     
+        print (reqid, data)
     
     #----------------------------------------------------------------------
     def onGetAccountBalance(self, data, reqid):
         """查询余额回调"""
-        print reqid, data
+        print (reqid, data)
         for d in data['data']['list']:
-            print d
+            print (d)
         
     #----------------------------------------------------------------------
     def onGetOrders(self, data, reqid):
         """查询委托回调"""
-        print reqid, data    
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onGetMatchResults(self, data, reqid):
         """查询成交回调"""
-        print reqid, data      
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onGetOrder(self, data, reqid):
         """查询单一委托回调"""
-        print reqid, data    
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onGetMatchResult(self, data, reqid):
         """查询单一成交回调"""
-        print reqid, data    
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onPlaceOrder(self, data, reqid):
         """委托回调"""
-        print reqid, data
+        print (reqid, data)
     
     #----------------------------------------------------------------------
     def onCancelOrder(self, data, reqid):
         """撤单回调"""
-        print reqid, data          
+        print (reqid, data)
         
     #----------------------------------------------------------------------
     def onBatchCancel(self, data, reqid):
         """批量撤单回调"""
-        print reqid, data      
+        print (reqid, data)
 
 
 ########################################################################
@@ -646,7 +674,7 @@ class DataApi(object):
     #----------------------------------------------------------------------
     def onError(self, msg):
         """错误推送"""
-        print msg
+        print (msg)
         
     #----------------------------------------------------------------------
     def onData(self, data):
@@ -666,14 +694,14 @@ class DataApi(object):
     #----------------------------------------------------------------------
     def onMarketDepth(self, data):
         """行情深度推送 """
-        print data
+        print (data)
     
     #----------------------------------------------------------------------
     def onTradeDetail(self, data):
         """成交细节推送"""
-        print data
+        print (data)
     
     #----------------------------------------------------------------------
     def onMarketDetail(self, data):
         """市场细节推送"""
-        print data
+        print (data)

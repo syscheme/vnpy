@@ -15,38 +15,41 @@ def testTrade():
     try:
         accessKey = str(setting['accessKey'])
         secretKey = str(setting['secretKey'])
+        accountId = str(setting['accountId'])
     except KeyError:
         return            
    
     # 创建API对象并初始化
     api = TradeApi()
-    
-    api.init(api.HADAX, accessKey, secretKey, mode=api.SYNC_MODE)
+
+    # api.init(api.HADAX, accessKey, secretKey, mode=api.SYNC_MODE)
+    api.init(api.HUOBI, accessKey, secretKey, mode=api.SYNC_MODE)
     api.start()
 
     # 查询
-    print (api.getSymbols())
+    # print (api.getSymbols())
     print (api.getCurrencys())
     print (api.getTimestamp())
+
+    #online unicode converter
+    symbol = str(setting['symbols'][0])
+    # symbol = str(symbols[0]) # 'eop':eos to udtc
     
-    
-    #accountid = ''
-    symbol = 'aaceth'
-    
-    #api.getAccounts()
-    #api.getAccountBalance(accountid)
-    #api.getOrders(symbol, 'pre-submitted,submitted,partial-filled,partial-canceled,filled,canceled')
-    #api.getOrders(symbol, 'filled')
+    print (api.getAccounts())
+    print (api.getAccountBalance(accountId))
+    print (api.getOpenOrders(accountId, symbol, 'sell'))
+#    print (api.getOrders(symbol, 'pre-submitted,submitted,partial-filled,partial-canceled,filled,canceled'))
+#    print (api.getOrders(symbol, 'filled'))
     print (api.getMatchResults(symbol))
     
-    #api.getOrder('2440401255')
+    print (api.getOrder('2440401255'))
     #api.getMatchResult('2440401255')
     
     #api.placeOrder(accountid, '2', symbol, 'sell-market', source='api')
     #api.cancelOrder('2440451757')
     #api.batchCancel(['2440538580', '2440537853', '2440536765'])
     
-    input()    
+    # input()    
 
 
     
