@@ -582,6 +582,8 @@ class DataApi(object):
                 self.ws = create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
             else :
                 self.ws = create_connection(self.url)
+                
+            self._resubscribe()
 
             return True
 
@@ -591,7 +593,7 @@ class DataApi(object):
             return False
         
     #----------------------------------------------------------------------
-    def resubscribe(self):
+    def _resubscribe(self):
         """重新订阅"""
         d = self.subDict
         self.subDict = {}
@@ -658,9 +660,9 @@ class DataApi(object):
         del self.subDict[topic]
     
     #----------------------------------------------------------------------
-    def subscribeMarketDepth(self, symbol):
+    def subscribeMarketDepth(self, symbol,step=0):
         """订阅行情深度"""
-        topic = 'market.%s.depth.step0' %symbol
+        topic = 'market.%s.depth.step%d' %(symbol, step%6) # allowed step 0~5
         self.subTopic(topic)
         
     #----------------------------------------------------------------------
@@ -676,6 +678,49 @@ class DataApi(object):
         self.subTopic(topic)
         
     #----------------------------------------------------------------------
+    def subscribeKline(self, symbol,minutes=1):
+        """订阅K线数据"""
+        period ="1min"
+        minutes /=5
+        if minutes >0:
+            period ="5min"
+
+        minutes /=3
+        if minutes >0:
+            period ="15min"
+
+        minutes /=2
+        if minutes >0:
+            period ="30min"
+
+        minutes /=2
+        if minutes >0:
+            period ="60min"
+
+        minutes /=4
+        if minutes >0:
+            period ="4hour"
+
+        minutes /=6
+        if minutes >0:
+            period ="1day"
+
+        minutes /=7
+        if minutes >0:
+            period ="1week"
+
+        minutes /=4
+        if minutes >0:
+            period ="1mon"
+
+        minutes /=12
+        if minutes >0:
+            period ="1year"
+
+        topic = 'market.%s.kline.%s' %(symbol, period) # allowed { 1min, 5min, 15min, 30min, 60min, 4hour,1day, 1mon, 1week, 1year }
+        self.subTopic(topic)
+        
+    #----------------------------------------------------------------------
     def onError(self, msg):
         """错误推送"""
         print (msg)
@@ -688,6 +733,8 @@ class DataApi(object):
         elif 'ch' in data:
             if 'depth.step' in data['ch']:
                 self.onMarketDepth(data)
+            elif 'kline' in data['ch']:
+                self.onKline(data)
             elif 'trade.detail' in data['ch']:
                 self.onTradeDetail(data)
             elif 'detail' in data['ch']:
@@ -697,15 +744,33 @@ class DataApi(object):
     
     #----------------------------------------------------------------------
     def onMarketDepth(self, data):
-        """行情深度推送 """
+        """行情深度推送 
+        sample:
+        {u'ch': u'market.ethusdt.depth.step0', u'ts': 1531119204038, u'tick': {	u'version': 11837097362, u'bids': [
+            [481.2, 6.9387], [481.18, 1.901], [481.17, 5.0], [481.02, 0.96], [481.0, 4.9474], [480.94, 9.537], [480.93, 3.5159], [480.89, 1.0], [480.81, 2.06], [480.8, 30.2504], [480.72, 0.109], [480.64, 0.06], 		[480.63, 1.0], [480.61, 0.109], [480.6, 0.4899], [480.58, 1.9059], [480.56, 0.06], [480.5, 21.241], [480.49, 1.1444], [480.46, 1.0], [480.44, 2.4982], [480.43, 1.0], [480.41, 0.1875], [480.35, 1.0637], 		...		
+            [494.01, 0.05], [494.05, 0.231], [494.26, 50.3659], [494.45, 0.2889]
+        ]}}
+        """
         print (data)
     
     #----------------------------------------------------------------------
     def onTradeDetail(self, data):
-        """成交细节推送"""
+        """成交细节推送
+        {u'tick': {u'data': [{u'price': 481.93, u'amount': 0.1499, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405480484L}, {u'price': 481.94, u'amount': 0.2475, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405466973L}, {u'price': 481.97, u'amount': 6.3635, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405475106L}, {u'price': 481.98, u'amount': 0.109, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405468495L}, {u'price': 481.98, u'amount': 0.109, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405468818L}, {u'price': 481.99, u'amount': 6.3844, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405471868L}, {u'price': 482.0, u'amount': 0.6367, u'direction': u'buy', u'ts': 1531119914439, u'id': 118378776467405439802L}], u'id': 11837877646, u'ts': 1531119914439}, u'ch': u'market.ethusdt.trade.detail', u'ts': 1531119914494}
+        {u'tick': {u'data': [{u'price': 481.96, u'amount': 0.109, u'direction': u'sell', u'ts': 1531119918505, u'id': 118378822907405482834L}], u'id': 11837882290, u'ts': 1531119918505}, u'ch': u'market.ethusdt.trade.detail', u'ts': 1531119918651}
+        """
         print (data)
     
     #----------------------------------------------------------------------
     def onMarketDetail(self, data):
-        """市场细节推送"""
+        """市场细节推送, 最近24小时成交量、成交额、开盘价、收盘价、最高价、最低价、成交笔数等
+        {u'tick': {u'count': 103831, u'vol': 39127093.56251132, u'high': 494.99, u'amount': 80614.73642133494, u'version': 11838075621, u'low': 478.0, u'close': 482.08, u'open': 484.56, u'id': 11838075621}, u'ch': u'market.ethusdt.detail', u'ts': 1531120097994}
+        """
+        print (data)
+
+    #----------------------------------------------------------------------
+    def onKline(self, data):
+        """K线数据
+        {u'tick': {u'count': 103831, u'vol': 39127093.56251132, u'high': 494.99, u'amount': 80614.73642133494, u'version': 11838075621, u'low': 478.0, u'close': 482.08, u'open': 484.56, u'id': 11838075621}, u'ch': u'market.ethusdt.detail', u'ts': 1531120097994}
+        """
         print (data)
