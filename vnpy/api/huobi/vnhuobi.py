@@ -15,8 +15,8 @@ from time import sleep
 
 import json
 import zlib
-# from websocket import create_connection, _exceptions
-import websocket
+from websocket import create_connection, _exceptions
+# import websockets
 
 # 常量定义
 TIMEOUT = 5
@@ -98,8 +98,7 @@ class TradeApi(object):
 #              "http"  : "http://localhost:8118/", 
 #              "https" : "http://localhost:8118/"
         }
-
-        
+    
         return True
         
     #----------------------------------------------------------------------
@@ -520,7 +519,11 @@ class TradeApi(object):
 
 ########################################################################
 class DataApi(object):
-    """行情接口"""
+    """行情接口
+    https://github.com/huobiapi/API_Docs/wiki/WS_request
+    """
+    HUOBI = 'huobi'
+    HADAX = 'hadax'
 
     #----------------------------------------------------------------------
     def __init__(self):
@@ -535,9 +538,21 @@ class DataApi(object):
         self.subDict = {}
         
         self.url = ''
-        self.proxyHost = ''
-        self.proxyPort = 0        
-        
+        self.proxies = {}
+    
+    #----------------------------------------------------------------------
+    def init(self, exchHost, proxyHost=None, proxyPort=0):
+        """初始化"""
+        if exchHost == self.HUOBI:
+            hostname = HUOBI_API_HOST
+        else:
+            hostname = HADAX_API_HOST
+        self.url = 'wss://%s/ws' % hostname
+            
+        if proxyHost :
+            self.proxyHost = proxyHost
+            self.proxyPort = proxyPort
+
     #----------------------------------------------------------------------
     def run(self):
         """执行连接"""
@@ -551,7 +566,7 @@ class DataApi(object):
                 self.onError(u'数据解压出错：%s' %stream)
             except:
                 self.onError('行情服务器连接断开')
-                result = self.reconnect()
+                result = self._doConnect()
                 if not result:
                     self.onError(u'等待3秒后再次重连')
                     sleep(3)
@@ -560,15 +575,16 @@ class DataApi(object):
                     self.resubscribe()
     
     #----------------------------------------------------------------------
-    def reconnect(self):
+    def _doConnect(self):
         """重连"""
         try:
-            if not self.proxyHost:
-                self.ws = websocket.connect(self.url, http_proxy_host="localhost", http_proxy_port=8118, ssl=ssl.SSLContext(protocol=ssl.PROTOCOL_TLS)) # create_connection(self.url)
-            else:
-                self.ws = websocket.connect(self.url, http_proxy_host="localhost", http_proxy_port=8118, ssl=ssl.SSLContext(protocol=ssl.PROTOCOL_TLS)) # create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
+            if self.proxyHost :
+                self.ws = create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
+            else :
+                self.ws = create_connection(self.url)
 
             return True
+
         except:
             msg = traceback.format_exc()
             self.onError(u'行情服务器重连失败：%s' %msg)            
@@ -583,27 +599,15 @@ class DataApi(object):
             self.subTopic(topic)
         
     #----------------------------------------------------------------------
-    def connect(self, url, proxyHost='', proxyPort=0):
+    def connect(self):
         """连接"""
-        self.url = url
-        self.proxyHost = proxyHost
-        self.proxyPort = proxyPort
-
-        try:
-            self.ws = websocket.WebSocket()
-            if not self.proxyHost:
-                self.ws.connect(self.url) # create_connection(self.url)
-            else:
-                self.ws.connect(self.url,http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort) # create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
+        if not self._doConnect() :
+            return False
             
-            self.active = True
-            self.thread.start()
+        self.active = True
+        self.thread.start()
             
-            return True
-        except:
-            msg = traceback.format_exc()
-            self.onError(u'行情服务器连接失败：%s' %msg)
-            return False 
+        return True
         
     #----------------------------------------------------------------------
     def close(self):
