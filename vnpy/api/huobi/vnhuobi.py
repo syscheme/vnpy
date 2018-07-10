@@ -15,7 +15,9 @@ from time import sleep
 
 import json
 import zlib
-from websocket import create_connection, _exceptions # retrieve package: sudo pip install websocket-client pathlib
+
+# retrieve package: sudo pip install websocket websocket-client pathlib
+from websocket import create_connection, _exceptions
 
 # 常量定义
 TIMEOUT = 5
@@ -538,6 +540,7 @@ class DataApi(object):
         
         self.url = ''
         self.proxies = {}
+        self.proxyHost =None
     
     #----------------------------------------------------------------------
     def init(self, exchHost, proxyHost=None, proxyPort=0):
@@ -565,13 +568,12 @@ class DataApi(object):
                 self.onError(u'数据解压出错：%s' %stream)
             except:
                 self.onError('行情服务器连接断开')
-                result = self._doConnect()
-                if not result:
+                if self._doConnect() :
+                    self.onError(u'行情服务器重连成功')
+                    self._resubscribe()
+                else:
                     self.onError(u'等待3秒后再次重连')
                     sleep(3)
-                else:
-                    self.onError(u'行情服务器重连成功')
-                    self.resubscribe()
     
     #----------------------------------------------------------------------
     def _doConnect(self):
@@ -581,8 +583,6 @@ class DataApi(object):
                 self.ws = create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
             else :
                 self.ws = create_connection(self.url)
-
-            self._resubscribe()
 
             return True
 
