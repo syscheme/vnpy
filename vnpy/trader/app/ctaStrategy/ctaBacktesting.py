@@ -583,7 +583,7 @@ class BacktestingEngine(object):
         """
         计算回测结果
         """
-        self.output(u'计算回测结果')
+        self.output(u'计算回测结果: %s %s' % (self.symbol, self.strategy.name))
         
         # 首先基于回测后的成交记录，计算每笔交易的盈亏
         resultList = []             # 交易结果列表
@@ -838,8 +838,8 @@ class BacktestingEngine(object):
         plt.tight_layout()
         plt.xticks(xindex, tradeTimeIndex, rotation=30)  # 旋转15
         
-        fig.savefig(self.symbol + '_backtest.png', dpi=400, bbox_inches='tight')
-        plt.show()
+        # fig.savefig('BT_%s-%s.png' %(self.symbol, self.strategy.name), dpi=400, bbox_inches='tight')
+        # plt.show()
     
     #----------------------------------------------------------------------
     def clearBacktestingResult(self):
@@ -1179,7 +1179,8 @@ class DailyResult(object):
         self.tradeCount = len(self.tradeList)
         
         for trade in self.tradeList:
-            if trade.direction == DIRECTION_LO
+            if trade.direction == DIRECTION_LONG:
+                posChange = trade.volume
             else:
                 posChange = -trade.volume
                 
