@@ -112,7 +112,7 @@ class BacktestingEngine(object):
     #----------------------------------------------------------------------
     def output(self, content):
         """输出内容"""
-        print str(datetime.now()) + "\t" + content     
+        print str(datetime.now()) + "   " + content     
     
     #------------------------------------------------
     # 参数设置相关
@@ -838,6 +838,7 @@ class BacktestingEngine(object):
         plt.tight_layout()
         plt.xticks(xindex, tradeTimeIndex, rotation=30)  # 旋转15
         
+        fig.savefig(self.symbol + '_backtest.png', dpi=400, bbox_inches='tight')
         plt.show()
     
     #----------------------------------------------------------------------
@@ -1178,8 +1179,7 @@ class DailyResult(object):
         self.tradeCount = len(self.tradeList)
         
         for trade in self.tradeList:
-            if trade.direction == DIRECTION_LONG:
-                posChange = trade.volume
+            if trade.direction == DIRECTION_LO
             else:
                 posChange = -trade.volume
                 
