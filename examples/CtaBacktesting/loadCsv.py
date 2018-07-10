@@ -12,10 +12,19 @@ if __name__ == '__main__':
     #loadMcCsv('examples/CtaBacktesting/IF0000_1min.csv', MINUTE_DB_NAME, 'IF0000')
     # loadMcCsvBz2('examples/CtaBacktesting/IF0000_1min.csv.bz2', MINUTE_DB_NAME, 'IF0000')
     # loadMcCsv('rb0000_1min.csv', MINUTE_DB_NAME, 'rb0000')
-    hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2012.7-2012.12/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
-    hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2012.1-2012.6/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
-    hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2011.7-2011.12/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
-    hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2011.1-2011.6/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
+    
+    # hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2012.7-2012.12/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
+    # hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2012.1-2012.6/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
+    # hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2011.7-2011.12/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
+    # hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/2011.1-2011.6/SH601519.csv.bz2', MINUTE_DB_NAME, 'A601519')
+    folders = ['2012.7-2012.12', '2012.1-2012.6', '2011.7-2011.12', '2011.1-2011.6'];
+    symbols= ["601000", "601001", "601002", "601003", "601005", "601006", "601007", "601008", "601009", "601010", "601011", "601012", "601018", "601028", "601038", "601058", "601088", "601098", "601099", "601100", "601101", "601106", "601107", "601111", "601113", "601116", "601117", "601118", "601126", "601137", "601139", "601158", "601166", "601168", "601169", "601177", "601179", "601186", "601188", "601199", "601208", "601216", "601218", "601222", "601231", "601233", "601238", "601258", "601268", "601288", "601299", "601311", "601313", "601318", "601328", "601333", "601336", "601339", "601369", "601377", "601388", "601390", "601398", "601515", "601518", "601555", "601558", "601566", "601567", "601588", "601599", "601600", "601601", "601607", "601608", "601616", "601618", "601628", "601633", "601636", "601666", "601668", "601669", "601677", "601678", "601688", "601699", "601700", "601717", "601718", "601727", "601766", "601777", "601788", "601789", "601798", "601799", "601800", "601801", "601808", "601818", "601857", "601866", "601872", "601877", "601880", "601886", "601888", "601890", "601898", "601899", "601901", "601908", "601918", "601919", "601928", "601929", "601933", "601939", "601958", "601965", "601988", "601989", "601991", "601992", "601996", "601998", "601999"]
+
+    for s in symbols :
+        for f in folders :
+            csvfn = '%s/SH%s.csv.bz2' % (f, s)
+            sym = 'A%s' % s
+            hd.loadTaobaoCsvBz2('/mnt/haswell-home/tmp/AShare1minCsv/'+csvfn, MINUTE_DB_NAME, sym)
 
 
 
