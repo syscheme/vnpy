@@ -29,7 +29,7 @@ from vnpy.trader.vtObject import VtTickData, VtBarData
 from vnpy.trader.vtConstant import *
 from vnpy.trader.vtGateway import VtOrderData, VtTradeData
 
-from .ctaBase import *
+from .Base import *
 
 
 ########################################################################
@@ -583,7 +583,7 @@ class BacktestingEngine(object):
         return self.initData
     
     #----------------------------------------------------------------------
-    def writeCtaLog(self, content):
+    def writeAShLog(self, content):
         """记录日志"""
         log = str(self.dt) + ' ' + content 
         self.logList.append(log)
@@ -1359,7 +1359,6 @@ def optimize(strategyClass, setting, targetName,
              mode, startDate, initDays, endDate,
              slippage, rate, size, priceTick,
              dbName, symbol):
-
     """多进程优化时跑在每个进程中运行的函数"""
     engine = BacktestingEngine()
     engine.setBacktestingMode(mode)
@@ -1379,7 +1378,6 @@ def optimize(strategyClass, setting, targetName,
     try:
         targetValue = d[targetName]
     except KeyError:
-        targetValue = 0
-                    
+        targetValue = 0            
     return (str(setting), targetValue, d)    
     

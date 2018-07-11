@@ -8,11 +8,11 @@ from __future__ import division
 from __future__ import print_function
 
 
-from vnpy.trader.app.ctaStrategy.ctaBacktesting import BacktestingEngine, MINUTE_DB_NAME, OptimizationSetting
+from ahsApp.AShare.Strategy.Backtesting import BacktestingEngine, MINUTE_DB_NAME, OptimizationSetting
 
 
 if __name__ == '__main__':
-    from vnpy.trader.app.ctaStrategy.strategy.strategyAtrRsi import AtrRsiStrategy
+    from ahsApp.AShare.Strategy.strategy.strategyAtrRsi import AtrRsiStrategy
     
     # 创建回测引擎
     engine = BacktestingEngine()
@@ -50,4 +50,4 @@ if __name__ == '__main__':
     # 多进程优化，耗时：89秒
     engine.runParallelOptimization(AtrRsiStrategy, setting)
     
-    print(u'耗时：%s, setting:%s' %(time.time()-start, setting))
+    print(u'耗时：%s' %(time.time()-start))
