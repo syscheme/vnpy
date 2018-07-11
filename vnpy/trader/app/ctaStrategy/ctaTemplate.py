@@ -443,7 +443,7 @@ class BarGenerator(object):
             self.xminBar.date = self.xminBar.datetime.strftime('%Y%m%d')
             self.xminBar.time = self.xminBar.datetime.strftime('%H:%M:%S.%f')
             
-            # 推送
+            # 推送, X分钟策略计算和决策
             self.onXminBar(self.xminBar)
             
             # 清空老K线缓存对象
@@ -641,8 +641,3 @@ class CtaSignal(object):
         """获取信号仓位"""
         return self.signalPos
         
-        
-        
-        
-    
-    

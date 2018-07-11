@@ -48,7 +48,9 @@ class BacktestingEngine(object):
         """Constructor"""
         # 本地停止单
         self.stopOrderCount = 0     # 编号计数：stopOrderID = STOPORDERPREFIX + str(stopOrderCount)
-        
+
+        self.clearResult()
+
         # 本地停止单字典, key为stopOrderID，value为stopOrder对象
         self.stopOrderDict = {}             # 停止单撤销后不会从本字典中删除
         self.workingStopOrderDict = {}      # 停止单撤销后会从本字典中删除
@@ -92,13 +94,21 @@ class BacktestingEngine(object):
         self.tick = None
         self.bar = None
         self.dt = None      # 最新的时间
+        self._BTestId = ""
         
         # 日线回测结果计算用
         self.dailyResultDict = OrderedDict()
+
     
     #------------------------------------------------
     # 通用功能
     #------------------------------------------------    
+
+    #----------------------------------------------------------------------
+    def clearResult(self):
+        self.resultList = []             # 交易结果列表
+        self.posList = [0]               # 每笔成交后的持仓情况        
+        self.tradeTimeList = []          # 每笔成交时间戳
     
     #----------------------------------------------------------------------
     def roundToPriceTick(self, price):
@@ -112,7 +122,7 @@ class BacktestingEngine(object):
     #----------------------------------------------------------------------
     def output(self, content):
         """输出内容"""
-        print str(datetime.now()) + "   " + content     
+        print str(datetime.now()) + " BT[" + self._BTestId + "] " + content     
     
     #------------------------------------------------
     # 参数设置相关
@@ -221,6 +231,9 @@ class BacktestingEngine(object):
     #----------------------------------------------------------------------
     def runBacktesting(self):
         """运行回测"""
+
+        self._BTestId = "%s:%s" % (self.symbol, self.strategy.name)
+
         # 载入历史数据
         self.loadHistoryData()
         
@@ -285,14 +298,26 @@ class BacktestingEngine(object):
         self.strategy.name = self.strategy.className
     
     #----------------------------------------------------------------------
+    def bestBarCrossPrice(self, bar): 
+        return round(((bar.open + bar.close) *4 + bar.high + bar.low) /10, 2)
+
+    #----------------------------------------------------------------------
     def crossLimitOrder(self):
-        """基于最新数据撮合限价单"""
+        """基于最新数据撮合限价单
+        A limit order is an order placed with a brokerage to execute a buy or 
+        sell transaction at a set number of shares and at a specified limit
+        price or better. It is a take-profit order placed with a bank or
+        brokerage to buy or sell a set amount of a financial instrument at a
+        specified price or better; because a limit order is not a market order,
+        it may not be executed if the price set by the investor cannot be met
+        during the period of time in which the order is left open.
+        """
         # 先确定会撮合成交的价格
         if self.mode == self.BAR_MODE:
             buyCrossPrice = self.bar.low        # 若买入方向限价单价格高于该价格，则会成交
             sellCrossPrice = self.bar.high      # 若卖出方向限价单价格低于该价格，则会成交
-            buyBestCrossPrice = self.bar.open   # 在当前时间点前发出的买入委托可能的最优成交价
-            sellBestCrossPrice = self.bar.open  # 在当前时间点前发出的卖出委托可能的最优成交价
+            buyBestCrossPrice = self.bestBarCrossPrice(self.bar)   # 在当前时间点前发出的买入委托可能的最优成交价
+            sellBestCrossPrice = self.bestBarCrossPrice(self.bar)  # 在当前时间点前发出的卖出委托可能的最优成交价
         else:
             buyCrossPrice = self.tick.askPrice1
             sellCrossPrice = self.tick.bidPrice1
@@ -357,78 +382,88 @@ class BacktestingEngine(object):
                     del self.workingLimitOrderDict[orderID]
                 
     #----------------------------------------------------------------------
-    def crossStopOrder(self):
-        """基于最新数据撮合停止单"""
+    def crossStopOrder(self): 
+        """基于最新数据撮合停止单
+            A stop order is an order to buy or sell a security when its price moves past
+            a particular point, ensuring a higher probability of achieving a predetermined 
+            entry or exit price, limiting the investor's loss or locking in a profit. Once 
+            the price crosses the predefined entry/exit point, the stop order becomes a
+            market order.
+        """
         # 先确定会撮合成交的价格，这里和限价单规则相反
         if self.mode == self.BAR_MODE:
-            buyCrossPrice = self.bar.high    # 若买入方向停止单价格低于该价格，则会成交
+            buyCrossPrice  = self.bar.high   # 若买入方向停止单价格低于该价格，则会成交
             sellCrossPrice = self.bar.low    # 若卖出方向限价单价格高于该价格，则会成交
-            bestCrossPrice = self.bar.open   # 最优成交价，买入停止单不能低于，卖出停止单不能高于
+            bestCrossPrice = self.bestBarCrossPrice(self.bar)  # 最优成交价，买入停止单不能低于，卖出停止单不能高于
+            maxVolumeCross = self.bar.volume
         else:
-            buyCrossPrice = self.tick.lastPrice
+            buyCrossPrice  = self.tick.lastPrice
             sellCrossPrice = self.tick.lastPrice
             bestCrossPrice = self.tick.lastPrice
+            topVolumeCross = self.tick.volume
         
         # 遍历停止单字典中的所有停止单
         for stopOrderID, so in self.workingStopOrderDict.items():
             # 判断是否会成交
-            buyCross = so.direction==DIRECTION_LONG and so.price<=buyCrossPrice
-            sellCross = so.direction==DIRECTION_SHORT and so.price>=sellCrossPrice
+            buyCross  = (so.direction==DIRECTION_LONG)  and so.price<=buyCrossPrice
+            sellCross = (so.direction==DIRECTION_SHORT) and so.price>=sellCrossPrice
             
-            # 如果发生了成交
-            if buyCross or sellCross:
-                # 更新停止单状态，并从字典中删除该停止单
-                so.status = STOPORDER_TRIGGERED
-                if stopOrderID in self.workingStopOrderDict:
-                    del self.workingStopOrderDict[stopOrderID]                        
+            # 忽略未发生成交
+            if not buyCross and not sellCross : # and (so.volume < maxVolumeCross):
+                continue;
 
-                # 推送成交数据
-                self.tradeCount += 1            # 成交编号自增1
-                tradeID = str(self.tradeCount)
-                trade = VtTradeData()
-                trade.vtSymbol = so.vtSymbol
-                trade.tradeID = tradeID
-                trade.vtTradeID = tradeID
+            # 更新停止单状态，并从字典中删除该停止单
+            so.status = STOPORDER_TRIGGERED
+            if stopOrderID in self.workingStopOrderDict:
+                del self.workingStopOrderDict[stopOrderID]                        
+
+            # 推送成交数据
+            self.tradeCount += 1            # 成交编号自增1
+            tradeID = str(self.tradeCount)
+            trade = VtTradeData()
+            trade.vtSymbol = so.vtSymbol
+            trade.tradeID = tradeID
+            trade.vtTradeID = tradeID
                 
-                if buyCross:
-                    self.strategy.pos += so.volume
-                    trade.price = max(bestCrossPrice, so.price)
-                else:
-                    self.strategy.pos -= so.volume
-                    trade.price = min(bestCrossPrice, so.price)                
+            if buyCross:
+                self.strategy.pos += so.volume
+                trade.price = max(bestCrossPrice, so.price)
+            else:
+                self.strategy.pos -= so.volume
+                trade.price = min(bestCrossPrice, so.price)                
                 
-                self.limitOrderCount += 1
-                orderID = str(self.limitOrderCount)
-                trade.orderID = orderID
-                trade.vtOrderID = orderID
-                trade.direction = so.direction
-                trade.offset = so.offset
-                trade.volume = so.volume
-                trade.tradeTime = self.dt.strftime('%H:%M:%S')
-                trade.dt = self.dt
+            self.limitOrderCount += 1
+            orderID = str(self.limitOrderCount)
+            trade.orderID = orderID
+            trade.vtOrderID = orderID
+            trade.direction = so.direction
+            trade.offset = so.offset
+            trade.volume = so.volume
+            trade.tradeTime = self.dt.strftime('%H:%M:%S')
+            trade.dt = self.dt
                 
-                self.tradeDict[tradeID] = trade
+            self.tradeDict[tradeID] = trade
                 
-                # 推送委托数据
-                order = VtOrderData()
-                order.vtSymbol = so.vtSymbol
-                order.symbol = so.vtSymbol
-                order.orderID = orderID
-                order.vtOrderID = orderID
-                order.direction = so.direction
-                order.offset = so.offset
-                order.price = so.price
-                order.totalVolume = so.volume
-                order.tradedVolume = so.volume
-                order.status = STATUS_ALLTRADED
-                order.orderTime = trade.tradeTime
+            # 推送委托数据
+            order = VtOrderData()
+            order.vtSymbol = so.vtSymbol
+            order.symbol = so.vtSymbol
+            order.orderID = orderID
+            order.vtOrderID = orderID
+            order.direction = so.direction
+            order.offset = so.offset
+            order.price = so.price
+            order.totalVolume = so.volume
+            order.tradedVolume = so.volume
+            order.status = STATUS_ALLTRADED
+            order.orderTime = trade.tradeTime
                 
-                self.limitOrderDict[orderID] = order
+            self.limitOrderDict[orderID] = order
                 
-                # 按照顺序推送数据
-                self.strategy.onStopOrder(so)
-                self.strategy.onOrder(order)
-                self.strategy.onTrade(trade)
+            # 按照顺序推送数据
+            self.strategy.onStopOrder(so)
+            self.strategy.onOrder(order)
+            self.strategy.onTrade(trade)
     
     #------------------------------------------------
     # 策略接口相关
@@ -579,114 +614,131 @@ class BacktestingEngine(object):
     #------------------------------------------------      
     
     #----------------------------------------------------------------------
-    def calculateBacktestingResult(self):
+    def calculateTransactions(self):
         """
         计算回测结果
         """
-        self.output(u'计算回测结果: %s %s' % (self.symbol, self.strategy.name))
+        self.output(u'计算回测结果')
         
         # 首先基于回测后的成交记录，计算每笔交易的盈亏
-        resultList = []             # 交易结果列表
-        
+        self.clearResult()
+
         longTrade = []              # 未平仓的多头交易
         shortTrade = []             # 未平仓的空头交易
-        
-        tradeTimeList = []          # 每笔成交时间戳
-        posList = [0]               # 每笔成交后的持仓情况        
 
+        # ---------------------------
+        # scan all 交易
+        # ---------------------------
+        # convert the trade records into result records then put them into resultList
         for trade in self.tradeDict.values():
             # 复制成交对象，因为下面的开平仓交易配对涉及到对成交数量的修改
             # 若不进行复制直接操作，则计算完后所有成交的数量会变成0
             trade = copy.copy(trade)
             
             # 多头交易
+            # ---------------------------
             if trade.direction == DIRECTION_LONG:
-                # 如果尚无空头交易
-                if not shortTrade:
-                    longTrade.append(trade)
-                # 当前多头交易为平空
-                else:
-                    while True:
-                        entryTrade = shortTrade[0]
-                        exitTrade = trade
-                        
-                        # 清算开平仓交易
-                        closedVolume = min(exitTrade.volume, entryTrade.volume)
-                        result = TradingResult(entryTrade.price, entryTrade.dt, 
-                                               exitTrade.price, exitTrade.dt,
-                                               -closedVolume, self.rate, self.slippage, self.size)
-                        resultList.append(result)
-                        
-                        posList.extend([-1,0])
-                        tradeTimeList.extend([result.entryDt, result.exitDt])
-                        
-                        # 计算未清算部分
-                        entryTrade.volume -= closedVolume
-                        exitTrade.volume -= closedVolume
-                        
-                        # 如果开仓交易已经全部清算，则从列表中移除
-                        if not entryTrade.volume:
-                            shortTrade.pop(0)
-                        
-                        # 如果平仓交易已经全部清算，则退出循环
-                        if not exitTrade.volume:
-                            break
-                        
-                        # 如果平仓交易未全部清算，
-                        if exitTrade.volume:
-                            # 且开仓交易已经全部清算完，则平仓交易剩余的部分
-                            # 等于新的反向开仓交易，添加到队列中
-                            if not shortTrade:
-                                longTrade.append(exitTrade)
-                                break
-                            # 如果开仓交易还有剩余，则进入下一轮循环
-                            else:
-                                pass
-                        
-            # 空头交易        
-            else:
-                # 如果尚无多头交易
-                if not longTrade:
-                    shortTrade.append(trade)
-                # 当前空头交易为平多
-                else:                    
-                    while True:
-                        entryTrade = longTrade[0]
-                        exitTrade = trade
-                        
-                        # 清算开平仓交易
-                        closedVolume = min(exitTrade.volume, entryTrade.volume)
-                        result = TradingResult(entryTrade.price, entryTrade.dt, 
-                                               exitTrade.price, exitTrade.dt,
-                                               closedVolume, self.rate, self.slippage, self.size)
-                        resultList.append(result)
-                        
-                        posList.extend([1,0])
-                        tradeTimeList.extend([result.entryDt, result.exitDt])
 
-                        # 计算未清算部分
-                        entryTrade.volume -= closedVolume
-                        exitTrade.volume -= closedVolume
-                        
-                        # 如果开仓交易已经全部清算，则从列表中移除
-                        if not entryTrade.volume:
-                            longTrade.pop(0)
-                        
-                        # 如果平仓交易已经全部清算，则退出循环
-                        if not exitTrade.volume:
+                if not shortTrade:
+                    # 如果尚无空头交易
+                    longTrade.append(trade)
+                    continue
+
+                # 当前多头交易为平空
+                while True:
+                    entryTrade = shortTrade[0]
+                    exitTrade = trade
+                    
+                    # 清算开平仓交易
+                    closedVolume = min(exitTrade.volume, entryTrade.volume)
+                    result = TradingResult(entryTrade.price, entryTrade.dt, 
+                                           exitTrade.price, exitTrade.dt,
+                                           -closedVolume, self.rate, self.slippage, self.size)
+
+                    self.resultList.append(result)
+                    
+                    self.posList.extend([-1,0])
+                    self.tradeTimeList.extend([result.entryDt, result.exitDt])
+                    
+                    # 计算未清算部分
+                    entryTrade.volume -= closedVolume
+                    exitTrade.volume -= closedVolume
+                    
+                    # 如果开仓交易已经全部清算，则从列表中移除
+                    if not entryTrade.volume:
+                        shortTrade.pop(0)
+                    
+                    # 如果平仓交易已经全部清算，则退出循环
+                    if not exitTrade.volume:
+                        break
+                    
+                    # 如果平仓交易未全部清算，
+                    if exitTrade.volume:
+                        # 且开仓交易已经全部清算完，则平仓交易剩余的部分
+                        # 等于新的反向开仓交易，添加到队列中
+                        if not shortTrade:
+                            longTrade.append(exitTrade)
                             break
-                        
-                        # 如果平仓交易未全部清算，
-                        if exitTrade.volume:
-                            # 且开仓交易已经全部清算完，则平仓交易剩余的部分
-                            # 等于新的反向开仓交易，添加到队列中
-                            if not longTrade:
-                                shortTrade.append(exitTrade)
-                                break
-                            # 如果开仓交易还有剩余，则进入下一轮循环
-                            else:
-                                pass                    
+                        # 如果开仓交易还有剩余，则进入下一轮循环
+                        else:
+                            pass
+
+                continue 
+                # end of # 多头交易
+
+            # 空头交易        
+            # ---------------------------
+            if not longTrade:
+                # 如果尚无多头交易
+                shortTrade.append(trade)
+                continue
+
+            # 当前空头交易为平多
+            while True:
+                entryTrade = longTrade[0]
+                exitTrade = trade
+                
+                # 清算开平仓交易
+                closedVolume = min(exitTrade.volume, entryTrade.volume)
+                result = TradingResult(entryTrade.price, entryTrade.dt, 
+                                       exitTrade.price, exitTrade.dt,
+                                       closedVolume, self.rate, self.slippage, self.size)
+
+                self.resultList.append(result)
+                self.posList.extend([1,0])
+                self.tradeTimeList.extend([result.entryDt, result.exitDt])
+
+                # 计算未清算部分
+                entryTrade.volume -= closedVolume
+                exitTrade.volume -= closedVolume
+                
+                # 如果开仓交易已经全部清算，则从列表中移除
+                if not entryTrade.volume:
+                    longTrade.pop(0)
+                
+                # 如果平仓交易已经全部清算，则退出循环
+                if not exitTrade.volume:
+                    break
+                
+                # 如果平仓交易未全部清算，
+                if exitTrade.volume:
+                    # 且开仓交易已经全部清算完，则平仓交易剩余的部分
+                    # 等于新的反向开仓交易，添加到队列中
+                    if not longTrade:
+                        shortTrade.append(exitTrade)
+                        break
+                    # 如果开仓交易还有剩余，则进入下一轮循环
+                    else:
+                        pass                    
+
+                continue 
+                # end of 空头交易
+
+        # end of scanning
         
+        # ---------------------------
+        # 结算日
+        # ---------------------------
         # 到最后交易日尚未平仓的交易，则以最后价格平仓
         if self.mode == self.BAR_MODE:
             endPrice = self.bar.close
@@ -696,15 +748,20 @@ class BacktestingEngine(object):
         for trade in longTrade:
             result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
                                    trade.volume, self.rate, self.slippage, self.size)
-            resultList.append(result)
+            self.resultList.append(result)
             
         for trade in shortTrade:
             result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
                                    -trade.volume, self.rate, self.slippage, self.size)
-            resultList.append(result)            
+            self.resultList.append(result)
+
+        # return resultList;
+        return self.settleResult()
         
+    #----------------------------------------------------------------------
+    def settleResult(self):
         # 检查是否有交易
-        if not resultList:
+        if not self.resultList:
             self.output(u'无交易结果')
             return {}
         
@@ -728,7 +785,7 @@ class BacktestingEngine(object):
         totalWinning = 0        # 总盈利金额		
         totalLosing = 0         # 总亏损金额        
         
-        for result in resultList:
+        for result in self.resultList:
             capital += result.pnl
             maxCapital = max(capital, maxCapital)
             drawdown = capital - maxCapital
@@ -781,35 +838,14 @@ class BacktestingEngine(object):
         d['averageWinning'] = averageWinning
         d['averageLosing'] = averageLosing
         d['profitLossRatio'] = profitLossRatio
-        d['posList'] = posList
-        d['tradeTimeList'] = tradeTimeList
-        d['resultList'] = resultList
+        d['posList'] = self.posList
+        d['tradeTimeList'] = self.tradeTimeList
+        d['resultList'] = self.resultList
         
         return d
         
     #----------------------------------------------------------------------
-    def showBacktestingResult(self):
-        """显示回测结果"""
-        d = self.calculateBacktestingResult()
-        
-        # 输出
-        self.output('-' * 30)
-        self.output(u'第一笔交易：\t%s' % d['timeList'][0])
-        self.output(u'最后一笔交易：\t%s' % d['timeList'][-1])
-        
-        self.output(u'总交易次数：\t%s' % formatNumber(d['totalResult']))        
-        self.output(u'总盈亏：\t%s' % formatNumber(d['capital']))
-        self.output(u'最大回撤: \t%s' % formatNumber(min(d['drawdownList'])))                
-        
-        self.output(u'平均每笔盈利：\t%s' %formatNumber(d['capital']/d['totalResult']))
-        self.output(u'平均每笔滑点：\t%s' %formatNumber(d['totalSlippage']/d['totalResult']))
-        self.output(u'平均每笔佣金：\t%s' %formatNumber(d['totalCommission']/d['totalResult']))
-        
-        self.output(u'胜率\t\t%s%%' %formatNumber(d['winningRate']))
-        self.output(u'盈利交易平均值\t%s' %formatNumber(d['averageWinning']))
-        self.output(u'亏损交易平均值\t%s' %formatNumber(d['averageLosing']))
-        self.output(u'盈亏比：\t%s' %formatNumber(d['profitLossRatio']))
-    
+    def plotBacktestingResult(self):
         # 绘图
         fig = plt.figure(figsize=(10, 16))
         
@@ -840,10 +876,38 @@ class BacktestingEngine(object):
         
         # fig.savefig('BT_%s-%s.png' %(self.symbol, self.strategy.name), dpi=400, bbox_inches='tight')
         # plt.show()
+
+    #----------------------------------------------------------------------
+    def showBacktestingResult(self):
+        """显示回测结果"""
+
+        d = self.calculateTransactions()
+        
+        # 输出
+        self.output('-' * 30)
+        self.output(u'第一笔交易：\t%s' % d['timeList'][0])
+        self.output(u'最后一笔交易：\t%s' % d['timeList'][-1])
+        
+        self.output(u'总交易次数：\t%s' % formatNumber(d['totalResult']))        
+        self.output(u'总盈亏：\t%s' % formatNumber(d['capital']))
+        self.output(u'最大回撤: \t%s' % formatNumber(min(d['drawdownList'])))                
+        
+        self.output(u'平均每笔盈利：\t%s' %formatNumber(d['capital']/d['totalResult']))
+        self.output(u'平均每笔滑点：\t%s' %formatNumber(d['totalSlippage']/d['totalResult']))
+        self.output(u'平均每笔佣金：\t%s' %formatNumber(d['totalCommission']/d['totalResult']))
+        
+        self.output(u'胜率\t\t%s%%' %formatNumber(d['winningRate']))
+        self.output(u'盈利交易平均值\t%s' %formatNumber(d['averageWinning']))
+        self.output(u'亏损交易平均值\t%s' %formatNumber(d['averageLosing']))
+        self.output(u'盈亏比：\t%s' %formatNumber(d['profitLossRatio']))
+
+        # self.plotBacktestingResult()
+    
     
     #----------------------------------------------------------------------
-    def clearBacktestingResult(self):
+    def clearBackTesting(self):
         """清空之前回测的结果"""
+
         # 清空限价单相关
         self.limitOrderCount = 0
         self.limitOrderDict.clear()
@@ -857,6 +921,24 @@ class BacktestingEngine(object):
         # 清空成交相关
         self.tradeCount = 0
         self.tradeDict.clear()
+
+        self.clearResult()
+        self._BTestId = ""
+
+    #----------------------------------------------------------------------
+    def batchBacktesting(self, strategyList, d):
+        """批量回测结果"""
+
+        # self.loadHistoryData()
+
+        for strategy in strategyList:
+            if strategy ==None :
+                continue
+
+            self.clearBackTesting()
+            self.initStrategy(strategy, d)
+            self.runBacktesting()
+            self.showBacktestingResult()
         
     #----------------------------------------------------------------------
     def runOptimization(self, strategyClass, optimizationSetting):
@@ -870,7 +952,7 @@ class BacktestingEngine(object):
             self.output(u'优化设置有问题，请检查')
         
         # 遍历优化
-        resultList = []
+        self.resultList =[]
         for setting in settingList:
             self.clearBacktestingResult()
             self.output('-' * 30)
@@ -1124,11 +1206,11 @@ class TradingResult(object):
         
         self.volume = volume    # 交易数量（+/-代表方向）
         
-        self.turnover = (self.entryPrice+self.exitPrice)*size*abs(volume)   # 成交金额
-        self.commission = self.turnover*rate                                # 手续费成本
-        self.slippage = slippage*2*size*abs(volume)                         # 滑点成本
-        self.pnl = ((self.exitPrice - self.entryPrice) * volume * size 
-                    - self.commission - self.slippage)                      # 净盈亏
+        self.turnover   = (self.entryPrice + self.exitPrice) *size*abs(volume)   # 成交金额
+        self.commission = self.turnover*rate                                     # 手续费成本
+        self.slippage   = slippage*2*size*abs(volume)                            # 滑点成本
+        self.pnl        = ((self.exitPrice - self.entryPrice) * volume * size 
+                            - self.commission - self.slippage)                   # 净盈亏
 
 
 ########################################################################

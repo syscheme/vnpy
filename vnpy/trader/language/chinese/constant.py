@@ -7,29 +7,29 @@ EMPTY_INT = 0
 EMPTY_FLOAT = 0.0
 
 # 方向常量
-DIRECTION_NONE = u'无方向'
-DIRECTION_LONG = u'多'
-DIRECTION_SHORT = u'空'
-DIRECTION_UNKNOWN = u'未知'
-DIRECTION_NET = u'净'
-DIRECTION_SELL = u'卖出'              # IB接口
-DIRECTION_COVEREDSHORT = u'备兑空'    # 证券期权
+DIRECTION_NONE         = u'NONE'    # u'无方向'
+DIRECTION_LONG         = u'LONG'    # u'多' 多头是指投资者预期市场上涨，希望通过在低价位上买入期货合约，比后以更高的价位出售期货合约进行获利的行为 
+DIRECTION_SHORT        = u'SHORT'   # u'空' 空头是指投资者预期市场下跌，希望通过在高价位上做空期货合约，比后以更低的价位买回期货合约平仓获利的行为。
+DIRECTION_UNKNOWN      = u'UNKNOWN' # u'未知'
+DIRECTION_NET          = u'NET'     # u'净'
+DIRECTION_SELL         = u'SELL'    # u'卖出'              # IB接口
+DIRECTION_COVEREDSHORT = u'COVEREDSHORT' # u'备兑空'    # 证券期权
 
 # 开平常量
-OFFSET_NONE = u'无开平'
-OFFSET_OPEN = u'开仓'
-OFFSET_CLOSE = u'平仓'
-OFFSET_CLOSETODAY = u'平今'
-OFFSET_CLOSEYESTERDAY = u'平昨'
-OFFSET_UNKNOWN = u'未知'
+OFFSET_NONE            = u'NONE' # u'无开平'
+OFFSET_OPEN            = u'OPEN' #  u'开仓'
+OFFSET_CLOSE           = u'CLOSE' #  u'平仓'
+OFFSET_CLOSETODAY      = u'CLOSETODAY' #  u'平今'
+OFFSET_CLOSEYESTERDAY  = u'CLOSEYESTERDAY' #  u'平昨'
+OFFSET_UNKNOWN         = u'UNKNOWN' #  u'未知'
 
 # 状态常量
-STATUS_NOTTRADED = u'未成交'
-STATUS_PARTTRADED = u'部分成交'
-STATUS_ALLTRADED = u'全部成交'
-STATUS_CANCELLED = u'已撤销'
-STATUS_REJECTED = u'拒单'
-STATUS_UNKNOWN = u'未知'
+STATUS_NOTTRADED  = u'NOTTRADED' # u'未成交'
+STATUS_PARTTRADED = u'PARTTRADED' # u'部分成交'
+STATUS_ALLTRADED  = u'ALLTRADED' # u'全部成交'
+STATUS_CANCELLED  = u'CANCELLED' # u'已撤销'
+STATUS_REJECTED   = u'REJECTED' # u'拒单'
+STATUS_UNKNOWN    = u'UNKNOWN' # u'未知'
 
 # 合约类型常量
 PRODUCT_EQUITY = u'股票'
