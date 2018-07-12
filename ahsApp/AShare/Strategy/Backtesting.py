@@ -63,8 +63,10 @@ class BacktestingEngine(object):
         self.startDate = ''
         self.initDays = 0        
         self.endDate = ''
+        self.startClose = 0.0
+        self.endClose = 0.0
 
-        self.capital = 1000000      # 回测时的起始本金（默认100万）
+        self.capital = 100000       # 回测时的起始本金（默认10万）
         self.slippage = 0           # 回测时假设的滑点
         self.rate = 0               # 回测时假设的佣金比例（适用于百分比佣金）
         self.size = 1               # 合约大小，默认为1    
@@ -262,11 +264,20 @@ class BacktestingEngine(object):
             data.__dict__ = d
             func(data)     
             
+        if self.mode == self.BAR_MODE:
+            self.endClose = self.bar.close
+        else:
+            self.endClose = self.tick.priceTick
+
         self.output(u'数据回放结束')
         
     #----------------------------------------------------------------------
     def newBar(self, bar):
         """新的K线"""
+
+        if self.bar ==None:
+            self.startClose = bar.close
+
         self.bar = bar
         self.dt = bar.datetime
         
@@ -279,6 +290,10 @@ class BacktestingEngine(object):
     #----------------------------------------------------------------------
     def newTick(self, tick):
         """新的Tick"""
+
+        if self.tick ==None:
+            self.startClose = tick.priceTick
+
         self.tick = tick
         self.dt = tick.datetime
         
@@ -1026,6 +1041,9 @@ class BacktestingEngine(object):
     def calculateDailyResult(self):
         """计算按日统计的交易结果"""
         self.output(u'计算按日统计结果')
+
+        if self.tradeDict ==None or len(self.tradeDict) <=0:
+            return None
         
         # 将成交添加到每日交易结果中
         for trade in self.tradeDict.values():
@@ -1140,8 +1158,10 @@ class BacktestingEngine(object):
             
         # 输出统计结果
         self.output('-' * 30)
-        self.output(u'首个交易日：\t%s' % result['startDate'])
-        self.output(u'最后交易日：\t%s' % result['endDate'])
+        self.output(u'首个交易日：\t%s close %.2f' % (result['startDate'], self.startClose))
+        self.output(u'最后交易日：\t%s close %.2f' % (result['endDate'], self.endClose))
+        if self.startClose >0 :
+            self.output(u'市场收益率:\t%s%%' % ((self.endClose -self.startClose)*100/self.startClose))
         
         self.output(u'总交易日：\t%s' % result['totalDays'])
         self.output(u'盈利交易日\t%s' % result['profitDays'])
@@ -1171,7 +1191,7 @@ class BacktestingEngine(object):
         self.output(u'收益标准差：\t%s%%' % formatNumber(result['returnStd']))
         self.output(u'Sharpe Ratio：\t%s' % formatNumber(result['sharpeRatio']))
         
-        self.plotDailyResult(df)
+        # self.plotDailyResult(df)
 
     #----------------------------------------------------------------------
     def plotDailyResult(self, df):
@@ -1359,6 +1379,7 @@ def optimize(strategyClass, setting, targetName,
              mode, startDate, initDays, endDate,
              slippage, rate, size, priceTick,
              dbName, symbol):
+
     """多进程优化时跑在每个进程中运行的函数"""
     engine = BacktestingEngine()
     engine.setBacktestingMode(mode)
@@ -1378,6 +1399,7 @@ def optimize(strategyClass, setting, targetName,
     try:
         targetValue = d[targetName]
     except KeyError:
-        targetValue = 0            
+        targetValue = 0
+                    
     return (str(setting), targetValue, d)    
     

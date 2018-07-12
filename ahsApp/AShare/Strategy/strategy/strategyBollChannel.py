@@ -150,6 +150,10 @@ class BollChannelStrategy(AShTemplate):
         self.atrValue = am.atr(self.atrWindow)
         
         # 判断是否要进行交易
+
+        # no SELL-Short
+# no SELL-Short        if self.pos < 0:
+# no SELL-Short            return
     
         # 当前无仓位，发送开仓委托
         if self.pos == 0:
@@ -159,8 +163,8 @@ class BollChannelStrategy(AShTemplate):
             if self.cciValue > 0:
                 self.buy(self.bollUp, self.fixedSize, True)
                 
-            elif self.cciValue < 0:
-                self.short(self.bollDown, self.fixedSize, True)
+# no SELL-Short            elif self.cciValue < 0:
+# no SELL-Short                self.short(self.bollDown, self.fixedSize, True)
     
         # 持有多头仓位
         elif self.pos > 0:
@@ -170,13 +174,13 @@ class BollChannelStrategy(AShTemplate):
             
             self.sell(self.longStop, abs(self.pos), True)
     
-        # 持有空头仓位
-        elif self.pos < 0:
-            self.intraTradeHigh = bar.high
-            self.intraTradeLow = min(self.intraTradeLow, bar.low)
-            self.shortStop = self.intraTradeLow + self.atrValue * self.slMultiplier
+# no SELL-Short        # 持有空头仓位
+# no SELL-Short        elif self.pos < 0:
+# no SELL-Short            self.intraTradeHigh = bar.high
+# no SELL-Short            self.intraTradeLow = min(self.intraTradeLow, bar.low)
+# no SELL-Short            self.shortStop = self.intraTradeLow + self.atrValue * self.slMultiplier
             
-            self.cover(self.shortStop, abs(self.pos), True)
+# no SELL-Short            self.cover(self.shortStop, abs(self.pos), True)
             
         # 同步数据到数据库
         self.saveSyncData()        
