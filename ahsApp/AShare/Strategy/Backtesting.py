@@ -345,6 +345,12 @@ class BacktestingEngine(object):
             sellCrossPrice = self.bar.high      # 若卖出方向限价单价格低于该价格，则会成交
             buyBestCrossPrice = self.bestBarCrossPrice(self.bar)   # 在当前时间点前发出的买入委托可能的最优成交价
             sellBestCrossPrice = self.bestBarCrossPrice(self.bar)  # 在当前时间点前发出的卖出委托可能的最优成交价
+            
+            # 张跌停封板
+            if buyCrossPrice <=self.bar.open*0.9 :
+                buyCrossPrice =0
+            if sellCrossPrice >= self.bar.open*1.1 :
+                sellCrossPrice =0
         else:
             buyCrossPrice = self.tick.askPrice1
             sellCrossPrice = self.tick.bidPrice1
@@ -368,45 +374,50 @@ class BacktestingEngine(object):
                          sellCrossPrice > 0)    # 国内的tick行情在跌停时bidPrice1为0，此时卖无法成交
             
             # 如果发生了成交
-            if buyCross or sellCross:
-                # 推送成交数据
-                self.tradeCount += 1            # 成交编号自增1
-                tradeID = str(self.tradeCount)
-                trade = VtTradeData()
-                trade.vtSymbol = order.vtSymbol
-                trade.tradeID = tradeID
-                trade.vtTradeID = tradeID
-                trade.orderID = order.orderID
-                trade.vtOrderID = order.orderID
-                trade.direction = order.direction
-                trade.offset = order.offset
-                
-                # 以买入为例：
-                # 1. 假设当根K线的OHLC分别为：100, 125, 90, 110
-                # 2. 假设在上一根K线结束(也是当前K线开始)的时刻，策略发出的委托为限价105
-                # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
-                if buyCross:
-                    trade.price = min(order.price, buyBestCrossPrice)
-                    self.strategy.pos += order.totalVolume
-                else:
-                    trade.price = max(order.price, sellBestCrossPrice)
-                    self.strategy.pos -= order.totalVolume
-                
-                trade.volume = order.totalVolume
-                trade.tradeTime = self.dt.strftime('%H:%M:%S')
-                trade.dt = self.dt
-                self.strategy.onTrade(trade)
-                
-                self.tradeDict[tradeID] = trade
-                
-                # 推送委托数据
-                order.tradedVolume = order.totalVolume
-                order.status = STATUS_ALLTRADED
-                self.strategy.onOrder(order)
-                
-                # 从字典中删除该限价单
-                if orderID in self.workingLimitOrderDict:
-                    del self.workingLimitOrderDict[orderID]
+            if not buyCross and not sellCross:
+                continue
+
+            # 推送成交数据
+            self.tradeCount += 1            # 成交编号自增1
+            tradeID = str(self.tradeCount)
+            trade = VtTradeData()
+            trade.vtSymbol = order.vtSymbol
+            trade.tradeID = tradeID
+            trade.vtTradeID = tradeID
+            trade.orderID = order.orderID
+            trade.vtOrderID = order.orderID
+            trade.direction = order.direction
+            trade.offset = order.offset
+            
+            # 以买入为例：
+            # 1. 假设当根K线的OHLC分别为：100, 125, 90, 110
+            # 2. 假设在上一根K线结束(也是当前K线开始)的时刻，策略发出的委托为限价105
+            # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
+            if buyCross:
+                trade.price = min(order.price, buyBestCrossPrice)
+                self.strategy.pos += order.totalVolume
+            else:
+                trade.price = max(order.price, sellBestCrossPrice)
+                self.strategy.pos -= order.totalVolume
+            
+            trade.volume = order.totalVolume
+            trade.tradeTime = self.dt.strftime('%H:%M:%S')
+            trade.dt = self.dt
+            self.strategy.onTrade(trade)
+            
+            self.tradeDict[tradeID] = trade
+            
+            # 推送委托数据
+            order.tradedVolume = order.totalVolume
+            order.status = STATUS_ALLTRADED
+            self.strategy.onOrder(order)
+
+            self.logBT('limCrossed:pos(%s) %s[%s,%s,%sx%s] by order: %s[%sx%s]' %
+                (self.strategy.pos, tradeID, trade.direction, trade.vtSymbol, trade.price, trade.volume, orderID, order.price,order.totalVolume))
+            
+            # 从字典中删除该限价单
+            if orderID in self.workingLimitOrderDict:
+                del self.workingLimitOrderDict[orderID]
                 
     #----------------------------------------------------------------------
     def crossStopOrder(self): 
@@ -610,10 +621,11 @@ class BacktestingEngine(object):
         return self.initData
     
     #----------------------------------------------------------------------
-    def writeAShLog(self, content):
+    def logBT(self, content):
         """记录日志"""
         log = str(self.dt) + ' ' + content 
         self.logList.append(log)
+        self.output(log)
     
     #----------------------------------------------------------------------
     def cancelAll(self, name):
@@ -970,8 +982,8 @@ class BacktestingEngine(object):
             self.clearBackTesting()
             self.initStrategy(strategy, d)
             self.runBacktesting()
-            self.showBacktestingResult()
-            # self.showDailyResult()
+            # self.showBacktestingResult()
+            self.showDailyResult()
         
     #----------------------------------------------------------------------
     def runOptimization(self, strategyClass, optimizationSetting):
@@ -1182,8 +1194,8 @@ class BacktestingEngine(object):
 
         # 输出统计结果
         self.output('-' * 30)
-        self.output(u'回放日期：\t%s(close=%.2f)~%s(close=%.2f): %s%%'  %(self._execStart, self._execStartClose, self._execEnd, self._execEndClose, originGain))
-        self.output(u'交易日期：\t%s(close=%.2f)~%s(close=%.2f)' % (result['startDate'], self._execStartClose, result['endDate'], self._execEndClose))
+        self.output(u'回放日期：\t%s(close:%.2f)~%s(close:%.2f): %s%%'  %(self._execStart, self._execStartClose, self._execEnd, self._execEndClose, formatNumber(originGain)))
+        self.output(u'交易日期：\t%s(close:%.2f)~%s(close:%.2f)' % (result['startDate'], self._execStartClose, result['endDate'], self._execEndClose))
         
         self.output(u'交易日数：\t%s (盈利%s,亏损%s)' % (result['totalDays'], result['profitDays'], result['lossDays']))
         

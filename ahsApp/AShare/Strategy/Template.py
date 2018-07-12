@@ -125,16 +125,18 @@ class AShTemplate(object):
     #----------------------------------------------------------------------
     def sendOrder(self, orderType, price, volume, stop=False):
         """发送委托"""
-        if self.trading:
-            # 如果stop为True，则意味着发本地停止单
-            if stop:
-                vtOrderIDList = self.ashEngine.sendStopOrder(self.vtSymbol, orderType, price, volume, self)
-            else:
-                vtOrderIDList = self.ashEngine.sendOrder(self.vtSymbol, orderType, price, volume, self) 
-            return vtOrderIDList
-        else:
+        if not self.trading:
             # 交易停止时发单返回空字符串
             return []
+        
+        # 如果stop为True，则意味着发本地停止单
+        self.logBT(u'sendOrder:%s, price:%.2f, vol:%d, stop:%s' %(orderType, price, volume, stop))
+        if stop:
+            vtOrderIDList = self.ashEngine.sendStopOrder(self.vtSymbol, orderType, price, volume, self)
+        else:
+            vtOrderIDList = self.ashEngine.sendOrder(self.vtSymbol, orderType, price, volume, self) 
+
+        return vtOrderIDList
         
     #----------------------------------------------------------------------
     def cancelOrder(self, vtOrderID):
@@ -174,10 +176,10 @@ class AShTemplate(object):
         return self.ashEngine.loadBar(self.barDbName, self.vtSymbol, days)
     
     #----------------------------------------------------------------------
-    def writeAShLog(self, content):
+    def logBT(self, content):
         """记录CTA日志"""
         content = self.name + ':' + content
-        self.ashEngine.writeAShLog(content)
+        self.ashEngine.logBT(content)
         
     #----------------------------------------------------------------------
     def putEvent(self):

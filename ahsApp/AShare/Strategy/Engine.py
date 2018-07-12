@@ -127,7 +127,7 @@ class Engine(object):
             self.strategyOrderDict[strategy.name].add(vtOrderID)                         # 添加到策略委托号集合中
             vtOrderIDList.append(vtOrderID)
             
-        self.writeAShLog(u'策略%s发送委托，%s，%s，%s@%s' 
+        self.logBT(u'策略%s发送委托，%s，%s，%s@%s' 
                          %(strategy.name, vtSymbol, req.direction, volume, price))
         
         return vtOrderIDList
@@ -266,7 +266,7 @@ class Engine(object):
                 if not tick.datetime:
                     tick.datetime = datetime.strptime(' '.join([tick.date, tick.time]), '%Y%m%d %H:%M:%S.%f')
             except ValueError:
-                self.writeAShLog(traceback.format_exc())
+                self.logBT(traceback.format_exc())
                 return
                 
             # 逐个推送到策略实例中
@@ -360,7 +360,7 @@ class Engine(object):
         return l    
     
     #----------------------------------------------------------------------
-    def writeAShLog(self, content):
+    def logBT(self, content):
         """快速发出CTA模块日志事件"""
         log = VtLogData()
         log.logContent = content
@@ -377,18 +377,18 @@ class Engine(object):
             className = setting['className']
         except Exception:
             msg = traceback.format_exc()
-            self.writeAShLog(u'载入策略出错：%s' %msg)
+            self.logBT(u'载入策略出错：%s' %msg)
             return
         
         # 获取策略类
         strategyClass = STRATEGY_CLASS.get(className, None)
         if not strategyClass:
-            self.writeAShLog(u'找不到策略类：%s' %className)
+            self.logBT(u'找不到策略类：%s' %className)
             return
         
         # 防止策略重名
         if name in self.strategyDict:
-            self.writeAShLog(u'策略实例重名：%s' %name)
+            self.logBT(u'策略实例重名：%s' %name)
         else:
             # 创建策略实例
             strategy = strategyClass(self, setting)  
@@ -421,7 +421,7 @@ class Engine(object):
             
             self.mainEngine.subscribe(req, contract.gatewayName)
         else:
-            self.writeAShLog(u'%s的交易合约%s无法找到' %(strategy.name, strategy.vtSymbol))
+            self.logBT(u'%s的交易合约%s无法找到' %(strategy.name, strategy.vtSymbol))
 
     #----------------------------------------------------------------------
     def initStrategy(self, name):
@@ -435,9 +435,9 @@ class Engine(object):
                 self.loadSyncData(strategy)                             # 初始化完成后加载同步数据
                 self.subscribeMarketData(strategy)                      # 加载同步数据后再订阅行情
             else:
-                self.writeAShLog(u'请勿重复初始化策略实例：%s' %name)
+                self.logBT(u'请勿重复初始化策略实例：%s' %name)
         else:
-            self.writeAShLog(u'策略实例不存在：%s' %name)        
+            self.logBT(u'策略实例不存在：%s' %name)        
 
     #---------------------------------------------------------------------
     def startStrategy(self, name):
@@ -449,7 +449,7 @@ class Engine(object):
                 strategy.trading = True
                 self.callStrategyFunc(strategy, strategy.onStart)
         else:
-            self.writeAShLog(u'策略实例不存在：%s' %name)
+            self.logBT(u'策略实例不存在：%s' %name)
     
     #----------------------------------------------------------------------
     def stopStrategy(self, name):
@@ -471,7 +471,7 @@ class Engine(object):
                     if so.strategy is strategy:
                         self.cancelStopOrder(stopOrderID)   
         else:
-            self.writeAShLog(u'策略实例不存在：%s' %name)    
+            self.logBT(u'策略实例不存在：%s' %name)    
             
     #----------------------------------------------------------------------
     def initAll(self):
@@ -527,7 +527,7 @@ class Engine(object):
             
             return varDict
         else:
-            self.writeAShLog(u'策略实例不存在：' + name)    
+            self.logBT(u'策略实例不存在：' + name)    
             return None
     
     #----------------------------------------------------------------------
@@ -542,7 +542,7 @@ class Engine(object):
             
             return paramDict
         else:
-            self.writeAShLog(u'策略实例不存在：' + name)    
+            self.logBT(u'策略实例不存在：' + name)    
             return None
     
     #----------------------------------------------------------------------
@@ -582,7 +582,7 @@ class Engine(object):
             # 发出日志
             content = '\n'.join([u'策略%s触发异常已停止' %strategy.name,
                                 traceback.format_exc()])
-            self.writeAShLog(content)
+            self.logBT(content)
             
     #----------------------------------------------------------------------
     def saveSyncData(self, strategy):
@@ -598,7 +598,7 @@ class Engine(object):
                                  d, flt, True)
         
         content = u'策略%s同步数据保存成功，当前持仓%s' %(strategy.name, strategy.pos)
-        self.writeAShLog(content)
+        self.logBT(content)
     
     #----------------------------------------------------------------------
     def loadSyncData(self, strategy):
