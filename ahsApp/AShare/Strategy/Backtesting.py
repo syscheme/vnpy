@@ -31,7 +31,6 @@ from vnpy.trader.vtGateway import VtOrderData, VtTradeData
 
 from .Base import *
 
-
 ########################################################################
 class BacktestingEngine(object):
     """
@@ -63,8 +62,14 @@ class BacktestingEngine(object):
         self.startDate = ''
         self.initDays = 0        
         self.endDate = ''
-        self.startClose = 0.0
-        self.endClose = 0.0
+
+        self._execStart = ''
+        self._execEnd = ''
+        self._execStartClose = 0.0
+        self._execEndClose = 0.0
+        self._account =self # TODO: we are going to separate Account info from this BacktestingEngine
+        self._thisTradeDate = None
+        self._lastTradeDate = None
 
         self.capital = 100000       # 回测时的起始本金（默认10万）
         self.slippage = 0           # 回测时假设的滑点
@@ -203,10 +208,10 @@ class BacktestingEngine(object):
         # 首先根据回测模式，确认要使用的数据类
         if self.mode == self.BAR_MODE:
             dataClass = VtBarData
-            func = self.newBar
+            func = self.OnNewBar
         else:
             dataClass = VtTickData
-            func = self.newTick
+            func = self.OnNewTick
 
         # 载入初始化需要用的数据
         flt = {'datetime':{'$gte':self.dataStartDate,
@@ -228,7 +233,9 @@ class BacktestingEngine(object):
                                '$lte':self.dataEndDate}}  
         self.dbCursor = collection.find(flt).sort('datetime')
         
-        self.output(u'载入完成，数据量：%s' %(initCursor.count() + self.dbCursor.count()))
+        cRows = initCursor.count() + self.dbCursor.count()
+        self.output(u'载入完成，数据量：%s' %cRows)
+        return cRows
         
     #----------------------------------------------------------------------
     def runBacktesting(self):
@@ -237,15 +244,18 @@ class BacktestingEngine(object):
         self._BTestId = "%s.%s" % (self.symbol, self.strategy.name)
 
         # 载入历史数据
-        self.loadHistoryData()
+        if self.loadHistoryData() <=0 :
+            self.output(u'Quit testing due to empty data')
+            return
+
         
         # 首先根据回测模式，确认要使用的数据类
         if self.mode == self.BAR_MODE:
             dataClass = VtBarData
-            func = self.newBar
+            func = self.OnNewBar
         else:
             dataClass = VtTickData
-            func = self.newTick
+            func = self.OnNewTick
 
         self.output(u'开始回测')
         
@@ -265,18 +275,19 @@ class BacktestingEngine(object):
             func(data)     
             
         if self.mode == self.BAR_MODE:
-            self.endClose = self.bar.close
+            self._execEndClose = self.bar.close
         else:
-            self.endClose = self.tick.priceTick
+            self._execEndClose = self.tick.priceTick
 
         self.output(u'数据回放结束')
         
     #----------------------------------------------------------------------
-    def newBar(self, bar):
+    def OnNewBar(self, bar):
         """新的K线"""
 
         if self.bar ==None:
-            self.startClose = bar.close
+            self._execStartClose = bar.close
+            self._execStart = bar.date
 
         self.bar = bar
         self.dt = bar.datetime
@@ -288,11 +299,12 @@ class BacktestingEngine(object):
         self.updateDailyClose(bar.datetime, bar.close)
     
     #----------------------------------------------------------------------
-    def newTick(self, tick):
+    def OnNewTick(self, tick):
         """新的Tick"""
 
         if self.tick ==None:
-            self.startClose = tick.priceTick
+            self._execStartClose = tick.priceTick
+            self._execStart = tick.date
 
         self.tick = tick
         self.dt = tick.datetime
@@ -638,8 +650,8 @@ class BacktestingEngine(object):
         # 首先基于回测后的成交记录，计算每笔交易的盈亏
         self.clearResult()
 
-        longTrade = []              # 未平仓的多头交易
-        shortTrade = []             # 未平仓的空头交易
+        buyTrades = []              # 未平仓的多头交易
+        sellTrades = []             # 未平仓的空头交易
 
         # ---------------------------
         # scan all 交易
@@ -650,18 +662,18 @@ class BacktestingEngine(object):
             # 若不进行复制直接操作，则计算完后所有成交的数量会变成0
             trade = copy.copy(trade)
             
-            # 多头交易
+            # buy交易
             # ---------------------------
             if trade.direction == DIRECTION_LONG:
 
-                if not shortTrade:
+                if not sellTrades:
                     # 如果尚无空头交易
-                    longTrade.append(trade)
+                    buyTrades.append(trade)
                     continue
 
                 # 当前多头交易为平空
                 while True:
-                    entryTrade = shortTrade[0]
+                    entryTrade = sellTrades[0]
                     exitTrade = trade
                     
                     # 清算开平仓交易
@@ -681,7 +693,7 @@ class BacktestingEngine(object):
                     
                     # 如果开仓交易已经全部清算，则从列表中移除
                     if not entryTrade.volume:
-                        shortTrade.pop(0)
+                        sellTrades.pop(0)
                     
                     # 如果平仓交易已经全部清算，则退出循环
                     if not exitTrade.volume:
@@ -691,8 +703,8 @@ class BacktestingEngine(object):
                     if exitTrade.volume:
                         # 且开仓交易已经全部清算完，则平仓交易剩余的部分
                         # 等于新的反向开仓交易，添加到队列中
-                        if not shortTrade:
-                            longTrade.append(exitTrade)
+                        if not sellTrades:
+                            buyTrades.append(exitTrade)
                             break
                         # 如果开仓交易还有剩余，则进入下一轮循环
                         else:
@@ -703,14 +715,14 @@ class BacktestingEngine(object):
 
             # 空头交易        
             # ---------------------------
-            if not longTrade:
+            if not buyTrades:
                 # 如果尚无多头交易
-                shortTrade.append(trade)
+                sellTrades.append(trade)
                 continue
 
             # 当前空头交易为平多
             while True:
-                entryTrade = longTrade[0]
+                entryTrade = buyTrades[0]
                 exitTrade = trade
                 
                 # 清算开平仓交易
@@ -729,7 +741,7 @@ class BacktestingEngine(object):
                 
                 # 如果开仓交易已经全部清算，则从列表中移除
                 if not entryTrade.volume:
-                    longTrade.pop(0)
+                    buyTrades.pop(0)
                 
                 # 如果平仓交易已经全部清算，则退出循环
                 if not exitTrade.volume:
@@ -739,8 +751,8 @@ class BacktestingEngine(object):
                 if exitTrade.volume:
                     # 且开仓交易已经全部清算完，则平仓交易剩余的部分
                     # 等于新的反向开仓交易，添加到队列中
-                    if not longTrade:
-                        shortTrade.append(exitTrade)
+                    if not buyTrades:
+                        sellTrades.append(exitTrade)
                         break
                     # 如果开仓交易还有剩余，则进入下一轮循环
                     else:
@@ -749,7 +761,7 @@ class BacktestingEngine(object):
                 continue 
                 # end of 空头交易
 
-        # end of scanning
+        # end of scanning tradeDict
         
         # ---------------------------
         # 结算日
@@ -760,12 +772,12 @@ class BacktestingEngine(object):
         else:
             endPrice = self.tick.lastPrice
             
-        for trade in longTrade:
+        for trade in buyTrades:
             result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
                                    trade.volume, self.rate, self.slippage, self.size)
             self.resultList.append(result)
             
-        for trade in shortTrade:
+        for trade in sellTrades:
             result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
                                    -trade.volume, self.rate, self.slippage, self.size)
             self.resultList.append(result)
@@ -899,13 +911,16 @@ class BacktestingEngine(object):
         """显示回测结果"""
 
         d = self.calculateTransactions()
-        
+        originGain = 0.0
+        if self._execStartClose >0 :
+            originGain = (self._execEndClose - self._execStartClose)*100/self._execStartClose
+
         # 输出
         self.output('-' * 30)
-        self.output(u'第一笔交易：\t%s' % d['timeList'][0])
-        self.output(u'最后一笔交易：\t%s' % d['timeList'][-1])
+        self.output(u'回放日期：\t%s(close:%.2f)~%s(close:%.2f): %s%%'  %(self._execStart, self._execStartClose, self._execEnd, self._execEndClose, formatNumber(originGain)))
+        self.output(u'交易日期：\t%s(close:%.2f)~%s(close:%.2f)' % (d['timeList'][0], self._execStartClose, d['timeList'][-1], self._execEndClose))
         
-        self.output(u'总交易次数：\t%s' % formatNumber(d['totalResult']))        
+        self.output(u'总交易次数：\t%s' % formatNumber(d['totalResult'],0))        
         self.output(u'总盈亏：\t%s' % formatNumber(d['capital']))
         self.output(u'最大回撤: \t%s' % formatNumber(min(d['drawdownList'])))                
         
@@ -918,7 +933,7 @@ class BacktestingEngine(object):
         self.output(u'亏损交易平均值\t%s' %formatNumber(d['averageLosing']))
         self.output(u'盈亏比：\t%s' %formatNumber(d['profitLossRatio']))
 
-        self.plotBacktestingResult(d)
+        # self.plotBacktestingResult(d)
     
     
     #----------------------------------------------------------------------
@@ -955,8 +970,8 @@ class BacktestingEngine(object):
             self.clearBackTesting()
             self.initStrategy(strategy, d)
             self.runBacktesting()
-            # self.showBacktestingResult()
-            self.showDailyResult()
+            self.showBacktestingResult()
+            # self.showDailyResult()
         
     #----------------------------------------------------------------------
     def runOptimization(self, strategyClass, optimizationSetting):
@@ -1031,7 +1046,12 @@ class BacktestingEngine(object):
     def updateDailyClose(self, dt, price):
         """更新每日收盘价"""
         date = dt.date()
-        
+
+        # shift the trade date if date changes
+        if self._account._thisTradeDate != date :
+            self._account._lastTradeDate =self._account._thisTradeDate
+            self._account._thisTradeDate =date
+
         if date not in self.dailyResultDict:
             self.dailyResultDict[date] = DailyResult(date, price)
         else:
@@ -1156,18 +1176,18 @@ class BacktestingEngine(object):
             df = self.calculateDailyResult()
             df, result = self.calculateDailyStatistics(df)
             
+        originGain = 0.0
+        if self._execStartClose >0 :
+            originGain = (self._execEndClose - self._execStartClose)*100/self._execStartClose
+
         # 输出统计结果
         self.output('-' * 30)
-        self.output(u'首个交易日：\t%s close %.2f' % (result['startDate'], self.startClose))
-        self.output(u'最后交易日：\t%s close %.2f' % (result['endDate'], self.endClose))
-        if self.startClose >0 :
-            self.output(u'市场收益率:\t%s%%' % ((self.endClose -self.startClose)*100/self.startClose))
+        self.output(u'回放日期：\t%s(close=%.2f)~%s(close=%.2f): %s%%'  %(self._execStart, self._execStartClose, self._execEnd, self._execEndClose, originGain))
+        self.output(u'交易日期：\t%s(close=%.2f)~%s(close=%.2f)' % (result['startDate'], self._execStartClose, result['endDate'], self._execEndClose))
         
-        self.output(u'总交易日：\t%s' % result['totalDays'])
-        self.output(u'盈利交易日\t%s' % result['profitDays'])
-        self.output(u'亏损交易日：\t%s' % result['lossDays'])
+        self.output(u'交易日数：\t%s (盈利%s,亏损%s)' % (result['totalDays'], result['profitDays'], result['lossDays']))
         
-        self.output(u'起始资金：\t%s' % self.capital)
+        self.output(u'起始资金：\t%s' % formatNumber(self.capital))
         self.output(u'结束资金：\t%s' % formatNumber(result['endBalance']))
     
         self.output(u'总收益率：\t%s%%' % formatNumber(result['totalReturn']))
@@ -1179,7 +1199,7 @@ class BacktestingEngine(object):
         self.output(u'总手续费：\t%s' % formatNumber(result['totalCommission']))
         self.output(u'总滑点：\t%s' % formatNumber(result['totalSlippage']))
         self.output(u'总成交金额：\t%s' % formatNumber(result['totalTurnover']))
-        self.output(u'总成交笔数：\t%s' % formatNumber(result['totalTradeCount']))
+        self.output(u'总成交笔数：\t%s' % formatNumber(result['totalTradeCount'],0))
         
         self.output(u'日均盈亏：\t%s' % formatNumber(result['dailyNetPnl']))
         self.output(u'日均手续费：\t%s' % formatNumber(result['dailyCommission']))
@@ -1225,7 +1245,7 @@ class BacktestingEngine(object):
 class TradingResult(object):
     """每笔交易的结果"""
 
-    #----------------------------------------------------------------------
+   #----------------------------------------------------------------------
     def __init__(self, entryPrice, entryDt, exitPrice, 
                  exitDt, volume, rate, slippage, size):
         """Constructor"""
@@ -1238,7 +1258,15 @@ class TradingResult(object):
         self.volume = volume    # 交易数量（+/-代表方向）
         
         self.turnover   = (self.entryPrice + self.exitPrice) *size*abs(volume)   # 成交金额
-        self.commission = self.turnover*rate                                     # 手续费成本
+        entryCommission = self.entryPrice *size*abs(volume) *rate
+        if entryCommission < 2.0:
+            entryCommission =2.0
+
+        exitCommission = self.exitPrice *size*abs(volume) *rate
+        if exitCommission < 2.0:
+            exitCommission =2.0
+
+        self.commission = entryCommission + exitCommission
         self.slippage   = slippage*2*size*abs(volume)                            # 滑点成本
         self.pnl        = ((self.exitPrice - self.entryPrice) * volume * size 
                             - self.commission - self.slippage)                   # 净盈亏
@@ -1368,9 +1396,9 @@ class OptimizationSetting(object):
 
 
 #----------------------------------------------------------------------
-def formatNumber(n):
+def formatNumber(n, dec=2):
     """格式化数字到字符串"""
-    rn = round(n, 2)        # 保留两位小数
+    rn = round(n, dec)      # 保留两位小数
     return format(rn, ',')  # 加上千分符
     
 

@@ -10,6 +10,8 @@ import traceback
 
 # 用来保存策略类的字典
 STRATEGY_CLASS = {}
+STRATEGY_PREFFIX = 'strategy'
+STRATEGY_PREFFIX_LEN = len(STRATEGY_PREFFIX)
 
 #----------------------------------------------------------------------
 def loadStrategyModule(moduleName):
@@ -32,8 +34,8 @@ def loadStrategyModule(moduleName):
 path = os.path.abspath(os.path.dirname(__file__))
 for root, subdirs, files in os.walk(path):
     for name in files:
-        # 只有文件名中包含strategy且以.py结尾的文件，才是策略文件
-        if 'strategy' in name and name[-3:] == '.py':
+        # 只有文件名strategy preffix且以.py结尾的文件，才是策略文件
+        if STRATEGY_PREFFIX == name[:STRATEGY_PREFFIX_LEN] and name[-3:] == '.py':
             # 模块名称需要模块路径前缀
             moduleName = 'ahsApp.AShare.Strategy.strategy.' + name.replace('.py', '')
             loadStrategyModule(moduleName)
@@ -42,9 +44,12 @@ for root, subdirs, files in os.walk(path):
 # 遍历工作目录下的文件
 workingPath = os.getcwd()
 for root, subdirs, files in os.walk(workingPath):
+    if root != workingPath: # skip the non-direct folders
+        continue
+
     for name in files:
         # 只有文件名中包含strategy且以.py结尾的文件，才是策略文件
-        if 'strategy' in name and name[-3:] == '.py':
+        if STRATEGY_PREFFIX == name[:STRATEGY_PREFFIX_LEN] and name[-3:] == '.py':
             # 模块名称无需前缀
             moduleName = name.replace('.py', '')
             loadStrategyModule(moduleName)

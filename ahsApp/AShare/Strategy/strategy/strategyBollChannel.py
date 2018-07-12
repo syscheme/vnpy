@@ -28,7 +28,7 @@ from ahsApp.AShare.Strategy.Template import (AShTemplate,
 ########################################################################
 class BollChannelStrategy(AShTemplate):
     """基于布林通道的交易策略"""
-    className = 'BollChannelStrategy'
+    className = 'BollChannel'
     author = u'用Python的交易员'
 
     # 策略参数

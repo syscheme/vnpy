@@ -19,7 +19,7 @@ from ahsApp.AShare.Strategy.Template import (AShTemplate,
 ########################################################################
 class KkStrategy(AShTemplate):
     """基于King Keltner通道的交易策略"""
-    className = 'KkStrategy'
+    className = 'KingKeltner'
     author = u'用Python的交易员'
 
     # 策略参数

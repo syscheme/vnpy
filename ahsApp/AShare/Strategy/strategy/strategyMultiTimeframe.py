@@ -14,7 +14,7 @@ from ahsApp.AShare.Strategy.Template import (AShTemplate,
 ########################################################################
 class MultiTimeframeStrategy(AShTemplate):
     """跨时间周期交易策略"""
-    className = 'MultiTimeframeStrategy'
+    className = 'MultiTimeframe'
     author = u'用Python的交易员'
 
     # 策略参数

@@ -19,7 +19,7 @@ from ahsApp.AShare.Strategy.Template import (AShTemplate,
 ########################################################################
 class AtrRsiStrategy(AShTemplate):
     """结合ATR和RSI指标的一个分钟线交易策略"""
-    className = 'AtrRsiStrategy'
+    className = 'AtrRsi'
     author = u'用Python的交易员'
 
     # 策略参数

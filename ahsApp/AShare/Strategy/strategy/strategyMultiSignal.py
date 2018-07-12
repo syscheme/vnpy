@@ -142,7 +142,7 @@ class MaSignal(AShSignal):
 ########################################################################
 class MultiSignalStrategy(TargetPosTemplate):
     """跨时间周期交易策略"""
-    className = 'MultiSignalStrategy'
+    className = 'MultiSignal'
     author = u'用Python的交易员'
 
     # 策略参数

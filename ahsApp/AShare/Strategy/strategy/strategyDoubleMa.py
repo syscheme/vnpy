@@ -15,7 +15,7 @@ from ahsApp.AShare.Strategy.Template import (AShTemplate,
 ########################################################################
 class DoubleMaStrategy(AShTemplate):
     """双指数均线策略Demo"""
-    className = 'DoubleMaStrategy'
+    className = 'DoubleMa'
     author = u'用Python的交易员'
     
     # 策略参数

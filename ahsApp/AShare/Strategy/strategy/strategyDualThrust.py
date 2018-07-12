@@ -14,7 +14,7 @@ from ahsApp.AShare.Strategy.Template import AShTemplate, BarGenerator
 ########################################################################
 class DualThrustStrategy(AShTemplate):
     """DualThrust交易策略"""
-    className = 'DualThrustStrategy'
+    className = 'DualThrust'
     author = u'用Python的交易员'
 
     # 策略参数
