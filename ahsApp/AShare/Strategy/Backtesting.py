@@ -248,7 +248,6 @@ class BacktestingEngine(object):
         if self.loadHistoryData() <=0 :
             self.output(u'Quit testing due to empty data')
             return
-
         
         # 首先根据回测模式，确认要使用的数据类
         if self.mode == self.BAR_MODE:
@@ -288,22 +287,34 @@ class BacktestingEngine(object):
     def OnNewBar(self, bar):
         """新的K线"""
 
+        # shift the trade date and notify dayOpen if date changes
+        if self._account._thisTradeDate != bar.date :
+            self._account._lastTradeDate =self._account._thisTradeDate
+            self._account._thisTradeDate =bar.date
+            self.strategy.onDayOpen(bar.date)
+
         if self.bar ==None:
             self._execStartClose = bar.close
             self._execStart = bar.date
 
         self.bar = bar
-        self.dt = bar.datetime
+        self.dt  = bar.datetime
         
         self.crossLimitOrder()      # 先撮合限价单
         self.crossStopOrder()       # 再撮合停止单
         self.strategy.onBar(bar)    # 推送K线到策略中
         
-        self.updateDailyClose(bar.datetime, bar.close)
+        self.updateDailyClose(self.dt, bar.close)
     
     #----------------------------------------------------------------------
     def OnNewTick(self, tick):
         """新的Tick"""
+
+        # shift the trade date and notify dayOpen if date changes
+        if self._account._thisTradeDate != tick.date :
+            self._account._lastTradeDate =self._account._thisTradeDate
+            self._account._thisTradeDate =tick.date
+            self.strategy.onDayOpen(tick.date)
 
         if self.tick ==None:
             self._execStartClose = tick.priceTick
@@ -316,7 +327,7 @@ class BacktestingEngine(object):
         self.crossStopOrder()
         self.strategy.onTick(tick)
         
-        self.updateDailyClose(tick.datetime, tick.lastPrice)
+        self.updateDailyClose(self.dt, tick.lastPrice)
         
     #----------------------------------------------------------------------
     def initStrategy(self, strategyClass, setting=None):
@@ -396,27 +407,36 @@ class BacktestingEngine(object):
             # 1. 假设当根K线的OHLC分别为：100, 125, 90, 110
             # 2. 假设在上一根K线结束(也是当前K线开始)的时刻，策略发出的委托为限价105
             # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
+            trade.volume = 0
             if buyCross:
+                trade.volume = order.totalVolume # TODO: the volume should depends on available cache
                 trade.price = min(order.price, buyBestCrossPrice)
-                self.strategy.pos += order.totalVolume
-            else:
+                self.strategy.pos += trade.volume
+            elif self.strategy.pos >0:
+                trade.volume = min(self.strategy.pos, order.totalVolume)
                 trade.price = max(order.price, sellBestCrossPrice)
-                self.strategy.pos -= order.totalVolume
+                self.strategy.pos -= trade.volume
             
-            trade.volume = order.totalVolume
-            trade.tradeTime = self.dt.strftime('%H:%M:%S')
-            trade.dt = self.dt
-            self.strategy.onTrade(trade)
+            if trade.volume >0:
+                trade.tradeTime = self.dt.strftime('%H:%M:%S')
+                trade.dt = self.dt
+                self.strategy.onTrade(trade)
             
-            self.tradeDict[tradeID] = trade
+                self.tradeDict[tradeID] = trade
+                self.logBT('limCrossed:pos(%s) %s[%s,%s,%sx%s] by order: %s[%sx%s]' %
+                    (self.strategy.pos, tradeID, trade.direction, trade.vtSymbol, trade.price, trade.volume, orderID, order.price,order.totalVolume))
             
-            # 推送委托数据
-            order.tradedVolume = order.totalVolume
-            order.status = STATUS_ALLTRADED
-            self.strategy.onOrder(order)
-
-            self.logBT('limCrossed:pos(%s) %s[%s,%s,%sx%s] by order: %s[%sx%s]' %
-                (self.strategy.pos, tradeID, trade.direction, trade.vtSymbol, trade.price, trade.volume, orderID, order.price,order.totalVolume))
+                # 推送委托数据
+                order.tradedVolume = trade.tradeTime
+                order.status = STATUS_ALLTRADED
+                if order.tradedVolume < order.totalVolume :
+                    order.status = STATUS_PARTTRADED
+                self.strategy.onOrder(order)
+            else :
+                # 推送委托数据
+                order.tradedVolume = 0
+                order.status = STATUS_CANCELLED
+                self.strategy.onOrder(order)
             
             # 从字典中删除该限价单
             if orderID in self.workingLimitOrderDict:
@@ -541,6 +561,10 @@ class BacktestingEngine(object):
         # 保存到限价单字典中
         self.workingLimitOrderDict[orderID] = order
         self.limitOrderDict[orderID] = order
+
+        # TODO: reduce available cash
+        # if order.direction == DIRECTION_LONG :
+        #     self._cashAvail -= 
         
         return [orderID]
     
@@ -1057,11 +1081,6 @@ class BacktestingEngine(object):
         """更新每日收盘价"""
         date = dt.date()
 
-        # shift the trade date if date changes
-        if self._account._thisTradeDate != date :
-            self._account._lastTradeDate =self._account._thisTradeDate
-            self._account._thisTradeDate =date
-
         if date not in self.dailyResultDict:
             self.dailyResultDict[date] = DailyResult(date, price)
         else:
@@ -1223,7 +1242,7 @@ class BacktestingEngine(object):
         self.output(u'收益标准差：\t%s%%' % formatNumber(result['returnStd']))
         self.output(u'Sharpe Ratio：\t%s' % formatNumber(result['sharpeRatio']))
         
-        self.plotDailyResult(df)
+        # self.plotDailyResult(df)
 
     #----------------------------------------------------------------------
     def plotDailyResult(self, df):
@@ -1366,8 +1385,8 @@ class DailyResult(object):
             self.slippage += slippagefee
         
         # 汇总
-        self.totalPnl = self.tradingPnl + self.positionPnl
-        self.netPnl = self.totalPnl - self.commission - self.slippage
+        self.totalPnl = round(self.tradingPnl + self.positionPnl, 2)
+        self.netPnl = round(self.totalPnl - self.commission - self.slippage, 2)
 
 
 ########################################################################
@@ -1465,3 +1484,35 @@ def optimize(strategyClass, setting, targetName,
                     
     return (str(setting), targetValue, d)    
     
+hs300s= [
+        "600000","600008","600009","600010","600011","600015","600016","600018","600019","600023",
+        "600025","600028","600029","600030","600031","600036","600038","600048","600050","600061",
+        "600066","600068","600085","600089","600100","600104","600109","600111","600115","600118",
+        "600153","600157","600170","600176","600177","600188","600196","600208","600219","600221",
+        "600233","600271","600276","600297","600309","600332","600339","600340","600346","600352",
+        "600362","600369","600372","600373","600376","600383","600390","600398","600406","600415",
+        "600436","600438","600482","600487","600489","600498","600516","600518","600519","600522",
+        "600535","600547","600549","600570","600583","600585","600588","600606","600637","600660",
+        "600663","600674","600682","600688","600690","600703","600704","600705","600739","600741",
+        "600795","600804","600809","600816","600820","600837","600867","600886","600887","600893",
+        "600900","600909","600919","600926","600958","600959","600977","600999","601006","601009",
+        "601012","601018","601021","601088","601099","601108","601111","601117","601155","601166",
+        "601169","601186","601198","601211","601212","601216","601225","601228","601229","601238",
+        "601288","601318","601328","601333","601336","601360","601377","601390","601398","601555",
+        "601600","601601","601607","601611","601618","601628","601633","601668","601669","601688",
+        "601718","601727","601766","601788","601800","601808","601818","601828","601838","601857",
+        "601866","601877","601878","601881","601888","601898","601899","601901","601919","601933",
+        "601939","601958","601985","601988","601989","601991","601992","601997","601998","603160",
+        "603260","603288","603799","603833","603858","603993","000001","000002","000060","000063",
+        "000069","000100","000157","000166","000333","000338","000402","000413","000415","000423",
+        "000425","000503","000538","000540","000559","000568","000623","000625","000627","000630",
+        "000651","000671","000709","000723","000725","000728","000768","000776","000783","000786",
+        "000792","000826","000839","000858","000876","000895","000898","000938","000959","000961",
+        "000963","000983","001965","001979","002007","002008","002024","002027","002044","002050",
+        "002065","002074","002081","002085","002142","002146","002153","002202","002230","002236",
+        "002241","002252","002294","002304","002310","002352","002385","002411","002415","002450",
+        "002456","002460","002466","002468","002470","002475","002493","002500","002508","002555",
+        "002558","002572","002594","002601","002602","002608","002624","002625","002673","002714",
+        "002736","002739","002797","002925","300003","300015","300017","300024","300027","300033",
+        "300059","300070","300072","300122","300124","300136","300144","300251","300408","300433"
+        ]

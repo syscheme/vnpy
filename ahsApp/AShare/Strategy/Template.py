@@ -35,6 +35,7 @@ class AShTemplate(object):
     inited = False                 # 是否进行了初始化
     trading = False                # 是否启动交易，由引擎管理
     pos = 0                        # 持仓情况
+    _posAvail = 0                  # 持仓情况
     
     # 参数列表，保存了参数的名称
     paramList = ['name',
@@ -97,6 +98,11 @@ class AShTemplate(object):
         """收到Bar推送（必须由用户继承实现）"""
         raise NotImplementedError
     
+    #----------------------------------------------------------------------
+    def onDayOpen(self, date):
+        """收到交易日开始推送"""
+        raise NotImplementedError
+
     #----------------------------------------------------------------------
     def onStopOrder(self, so):
         """收到停止单推送（必须由用户继承实现）"""

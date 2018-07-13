@@ -30,7 +30,7 @@
 from __future__ import division
 
 from vnpy.trader.vtObject import VtBarData
-from vnpy.trader.vtConstant import EMPTY_STRING
+from vnpy.trader.vtConstant import *
 from ahsApp.AShare.Strategy.Template import (AShTemplate, 
                                                      BarGenerator, 
                                                      ArrayManager)
@@ -99,12 +99,12 @@ class BollChannelStrategy(AShTemplate):
         """Constructor"""
         super(BollChannelStrategy, self).__init__(ashEngine, setting)
         
-        self.bg = BarGenerator(self.onBar, 15, self.onXminBar)        # 创建K线合成器对象
-        self.bg30 = BarGenerator(self.onBar, 30, self.on30minBar)
+        self.bg    = BarGenerator(self.onBar, 15, self.onXminBar)        # 创建K线合成器对象
+        self.bg_L2 = BarGenerator(self.onBar, 60, self.onBar_L2)
         self.am = ArrayManager()
         
     #----------------------------------------------------------------------
-    def on30minBar(self, bar):
+    def onBar_L2(self, bar):
         """"""
         
         
@@ -210,13 +210,14 @@ class BollChannelStrategy(AShTemplate):
         measureDesc = 'boll[%.2f~%.2f] cci[%d->%d] atr:%.2f' % (self.bollDown, self.bollUp, self._lastCCI, self.cciValue, self.atrValue)
 
         if toBuy - toSell>0 :
-            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing buy' %(self.pos, barDesc, measureDesc))
+            self.logBT(u'onXminBar() pos[%s/%s] bar[%s] %s => issuing buy' %(self._posAvail, self.pos, barDesc, measureDesc))
             # self.buy(self.bollUp, self.fixedSize, False)
             self.buy(bar.close+0.01, self.fixedSize*toBuy, False)
-        elif self.pos>0 and toSell - toBuy >0 :
-            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing sell' %(self.pos, barDesc, measureDesc))
+        elif self._posAvail >0 and toSell - toBuy >0 :
+            self.logBT(u'onXminBar() pos[%s/%s] bar[%s] %s => issuing sell' %(self._posAvail, self.pos, barDesc, measureDesc))
             # self.sell(self.longStop, abs(self.pos), False)
-            self.sell(bar.close-0.01, self.fixedSize*toSell, False) # abs(self.pos), False)
+            self.sell(bar.close-0.01, min(self._posAvail, self.fixedSize*toSell*10), False) # abs(self.pos), False)
+            # self.sell(bar.close-0.01, self.fixedSize*toSell, False) # abs(self.pos), False)
 
 
         # # 当前无仓位，发送Buy委托
@@ -246,13 +247,30 @@ class BollChannelStrategy(AShTemplate):
         self.putEvent()        
 
     #----------------------------------------------------------------------
+    def onDayOpen(self, date):
+        """收到交易日开始推送"""
+        self._posAvail = self.pos
+
+    #----------------------------------------------------------------------
     def onOrder(self, order):
         """收到委托变化推送（必须由用户继承实现）"""
-        pass
+        if order.status == STATUS_ALLTRADED :
+            # self.totalCash is comfirmed reduced
+            pass
+        elif order.status == STATUS_PARTTRADED : # order.tradedVolume < order.totalVolume :
+            # partially traded
+            pass
+        elif order.status == STATUS_CANCELLED :
+            # TODO: cash on hold goes to available
+            pass
 
     #----------------------------------------------------------------------
     def onTrade(self, trade):
         # 发出状态更新事件
+        # TODO update self.pos
+        if trade.direction == DIRECTION_SHORT:
+            self._posAvail -= trade.volume
+
         self.putEvent()
 
     #----------------------------------------------------------------------
