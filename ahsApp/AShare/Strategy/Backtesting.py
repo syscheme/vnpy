@@ -73,6 +73,7 @@ class BacktestingEngine(object):
         self._lastTradeDate = None
 
         self.capital = 100000       # 回测时的起始本金（默认10万）
+        self._casheAvail = 0       # 起始cache = capital
         self.slippage = 0           # 回测时假设的滑点
         self.rate = 0               # 回测时假设的佣金比例（适用于百分比佣金）
         self.size = 100             # 合约大小，默认为1    
@@ -158,6 +159,10 @@ class BacktestingEngine(object):
             # 若不修改时间则会导致不包含dataEndDate当天数据
             self.dataEndDate = self.dataEndDate.replace(hour=23, minute=59)    
         
+    #----------------------------------------------------------------------
+    def getCashAvailable(self):
+        return self._cashAvail
+
     #----------------------------------------------------------------------
     def setBacktestingMode(self, mode):
         """设置回测模式"""
@@ -257,6 +262,8 @@ class BacktestingEngine(object):
             dataClass = VtTickData
             func = self.OnNewTick
 
+        self._cashAvail = self.capital
+
         self.output(u'开始回测')
         
         self.strategy.inited = True
@@ -291,7 +298,9 @@ class BacktestingEngine(object):
         if self._account._thisTradeDate != bar.date :
             self._account._lastTradeDate =self._account._thisTradeDate
             self._account._thisTradeDate =bar.date
+            self.strategy._posAvail = self.strategy.pos
             self.strategy.onDayOpen(bar.date)
+
 
         if self.bar ==None:
             self._execStartClose = bar.close
@@ -402,22 +411,34 @@ class BacktestingEngine(object):
             trade.vtOrderID = order.orderID
             trade.direction = order.direction
             trade.offset = order.offset
+            trade.symbol = order.symbol
             
             # 以买入为例：
             # 1. 假设当根K线的OHLC分别为：100, 125, 90, 110
             # 2. 假设在上一根K线结束(也是当前K线开始)的时刻，策略发出的委托为限价105
             # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
             trade.volume = 0
+            (turnoverO, commissionO, slippageO) =(0,0,0)
+            (turnoverT, commissionT, slippageT) =(0,0,0)
             if buyCross:
+                turnoverO, commissionO, slippageO = amountOfTrade(order.symbol, order.price, order.totalVolume, self.size, self.slippage, self.rate)
                 trade.volume = order.totalVolume # TODO: the volume should depends on available cache
                 trade.price = min(order.price, buyBestCrossPrice)
                 self.strategy.pos += trade.volume
             elif self.strategy.pos >0:
+                turnoverO, commissionO, slippageO = amountOfTrade(order.symbol, order.price, -order.totalVolume, self.size, self.slippage, self.rate)
+                orderVolume = -order.totalVolume
                 trade.volume = min(self.strategy.pos, order.totalVolume)
                 trade.price = max(order.price, sellBestCrossPrice)
                 self.strategy.pos -= trade.volume
             
             if trade.volume >0:
+                tvolume = trade.volume
+                if not buyCross:
+                    tvolume = -trade.volume
+                
+                turnoverT, commissionT, slippageT = amountOfTrade(trade.symbol, trade.price, tvolume, self.size, self.slippage, self.rate)
+
                 trade.tradeTime = self.dt.strftime('%H:%M:%S')
                 trade.dt = self.dt
                 self.strategy.onTrade(trade)
@@ -437,6 +458,13 @@ class BacktestingEngine(object):
                 order.tradedVolume = 0
                 order.status = STATUS_CANCELLED
                 self.strategy.onOrder(order)
+
+            # update avail cache
+            if buyCross: #this was a buy
+                self._cashAvail += turnoverO + commissionO + slippageO
+                self._cashAvail -= turnoverT + commissionT + slippageT
+            else :
+                self._cashAvail += turnoverT - commissionT - slippageT
             
             # 从字典中删除该限价单
             if orderID in self.workingLimitOrderDict:
@@ -562,9 +590,10 @@ class BacktestingEngine(object):
         self.workingLimitOrderDict[orderID] = order
         self.limitOrderDict[orderID] = order
 
-        # TODO: reduce available cash
-        # if order.direction == DIRECTION_LONG :
-        #     self._cashAvail -= 
+        # reduce available cash
+        if order.direction == DIRECTION_LONG :
+            turnoverO, commissionO, slippageO = amountOfTrade(order.symbol, order.price, order.totalVolume, self.size, self.slippage, self.rate)
+            self._cashAvail -= turnoverO + commissionO + slippageO
         
         return [orderID]
     
@@ -577,6 +606,10 @@ class BacktestingEngine(object):
             order.status = STATUS_CANCELLED
             order.cancelTime = self.dt.strftime('%H:%M:%S')
             
+            # restore available cash
+            if order.direction == DIRECTION_LONG :
+                self._cashAvail += order.price * order.totalVolume * self.size # TODO: I have ignored the commission here
+
             self.strategy.onOrder(order)
             
             del self.workingLimitOrderDict[vtOrderID]
@@ -1304,10 +1337,11 @@ class TradingResult(object):
 
 
 #----------------------------------------------------------------------
-def amountOfTrade(trade, size, slippage=0, rate=3/1000) :
+# def amountOfTrade(trade, size, slippage=0, rate=3/1000) :
+def amountOfTrade(symbol, price, volume, size, slippage=0, rate=3/1000) :
     # 交易手续费=印花税+过户费+券商交易佣金
-    volumeX1 = abs(trade.volume) * size
-    turnOver = trade.price * volumeX1
+    volumeX1 = abs(volume) * size
+    turnOver = price * volumeX1
 
     # 印花税: 成交金额的1‰ 。目前向卖方单边征收
     tax = 0
@@ -1316,13 +1350,14 @@ def amountOfTrade(trade, size, slippage=0, rate=3/1000) :
         
     #过户费（仅上海收取，也就是买卖上海股票时才有）：每1000股收取1元，不足1000股按1元收取
     transfer =0
-    if len(trade.symbol)>2 and (trade.symbol[1]=='6' or trade.symbol[1]=='7'):
+    if len(symbol)>2 and (symbol[1]=='6' or symbol[1]=='7'):
         transfer = int((volumeX1+999)/1000)
         
     #3.券商交易佣金 最高为成交金额的3‰，最低5元起，单笔交易佣金不满5元按5元收取。
     commission = max(turnOver * rate, 5)
 
     return turnOver, tax + transfer + commission, volumeX1 * slippage
+
 
 ########################################################################
 class DailyResult(object):
@@ -1379,7 +1414,7 @@ class DailyResult(object):
                 
             self.tradingPnl += posChange * (self.closePrice - trade.price) * size
             self.closePosition += posChange
-            turnover, commission, slippagefee = amountOfTrade(trade, size, slippage, rate)
+            turnover, commission, slippagefee = amountOfTrade(trade.symbol, trade.price, trade.volume, size, slippage, rate)
             self.turnover += turnover
             self.commission += commission
             self.slippage += slippagefee

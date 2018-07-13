@@ -159,10 +159,19 @@ class BollChannelStrategy(AShTemplate):
         
         if not am.inited:
             return
-        
+
         # 计算指标数值
         self._lastCCI = self.cciValue
         self._lastATR = self.atrValue
+
+        if self.pos ==0:
+           self.intraTradeLow = self.intraTradeHigh =0
+
+        self.intraTradeHigh = max(bar.high, self.intraTradeHigh)
+        if self.intraTradeLow ==0 :
+            self.intraTradeLow = bar.low
+        else:
+            self.intraTradeLow = min(bar.low, self.intraTradeLow)
 
         toBuy=0
         toSell=0
@@ -187,6 +196,9 @@ class BollChannelStrategy(AShTemplate):
             toBuy =0
             toSell +=1
 
+        if bar.close <self.intraTradeHigh *0.95:
+            toSell = self.pos
+
         (self.bollUp, self.bollDown) = (bollUp, bollDown)
 
         self.cciValue = am.cci(self.cciWindow)
@@ -205,19 +217,30 @@ class BollChannelStrategy(AShTemplate):
         
 
         # 判断是否要进行交易
+        cash = self.ashEngine.getCashAvailable()
     
+        posDesc ='%s/%s,ca%.2f' % (self._posAvail, self.pos, cash)
         barDesc = '%.2f,%.2f,%.2f,%.2f' % (bar.open, bar.close, bar.high, bar.low)
         measureDesc = 'boll[%.2f~%.2f] cci[%d->%d] atr:%.2f' % (self.bollDown, self.bollUp, self._lastCCI, self.cciValue, self.atrValue)
 
-        if toBuy - toSell>0 :
-            self.logBT(u'onXminBar() pos[%s/%s] bar[%s] %s => issuing buy' %(self._posAvail, self.pos, barDesc, measureDesc))
-            # self.buy(self.bollUp, self.fixedSize, False)
-            self.buy(bar.close+0.01, self.fixedSize*toBuy, False)
-        elif self._posAvail >0 and toSell - toBuy >0 :
-            self.logBT(u'onXminBar() pos[%s/%s] bar[%s] %s => issuing sell' %(self._posAvail, self.pos, barDesc, measureDesc))
-            # self.sell(self.longStop, abs(self.pos), False)
-            self.sell(bar.close-0.01, min(self._posAvail, self.fixedSize*toSell*10), False) # abs(self.pos), False)
-            # self.sell(bar.close-0.01, self.fixedSize*toSell, False) # abs(self.pos), False)
+        # determine buy ability according to the available cash
+        maxBuy = (bar.close*1.01) * self.fixedSize * self.ashEngine.size
+        if maxBuy >0:
+            maxBuy = cash /maxBuy
+        else:
+            maxBuy =0
+
+        if (toBuy - toSell) >0 and maxBuy >1 :
+            vol = self.fixedSize*int(min(toBuy, maxBuy))
+            
+            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => BUY(%d)' %(posDesc, barDesc, measureDesc, vol))
+            self.buy(bar.close+0.01, vol, False)
+
+        elif self._posAvail >0 and (toSell - toBuy) >0 :
+            vol = min(self._posAvail, self.fixedSize*toSell*10)
+            
+            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => SELL(%d)' %(posDesc, barDesc, measureDesc, vol))
+            self.sell(bar.close-0.01, vol, False) # abs(self.pos), False)
 
 
         # # 当前无仓位，发送Buy委托
@@ -249,7 +272,6 @@ class BollChannelStrategy(AShTemplate):
     #----------------------------------------------------------------------
     def onDayOpen(self, date):
         """收到交易日开始推送"""
-        self._posAvail = self.pos
 
     #----------------------------------------------------------------------
     def onOrder(self, order):

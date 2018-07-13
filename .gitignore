@@ -11,6 +11,8 @@ Release/
 # Python编译文件
 *.pyc
 *.pyo
+*.png
+.~*
 
 # WingIDE文件
 *.wpr
@@ -53,3 +55,4 @@ vn.trader/build/*
 vn.trader/dist/*
 *.bak
 
+A601000.BollChannel.csv

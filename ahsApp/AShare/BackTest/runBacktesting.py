@@ -85,7 +85,7 @@ if __name__ == '__main__':
     for s in symbols :
         try:
             gc.collect()
-            backTestSymbol('A'+s, '20120101', '20120906')
+            backTestSymbol('A'+s, '20120101') #, '20120906')
             #backTestSymbolByAllStategy('A'+s, '20110101')
         except OSError, e:
             pass
