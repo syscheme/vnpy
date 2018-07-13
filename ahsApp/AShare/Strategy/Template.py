@@ -178,7 +178,6 @@ class AShTemplate(object):
     #----------------------------------------------------------------------
     def logBT(self, content):
         """记录CTA日志"""
-        content = self.name + ':' + content
         self.ashEngine.logBT(content)
         
     #----------------------------------------------------------------------

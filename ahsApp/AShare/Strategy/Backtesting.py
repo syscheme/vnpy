@@ -30,6 +30,7 @@ from vnpy.trader.vtConstant import *
 from vnpy.trader.vtGateway import VtOrderData, VtTradeData
 
 from .Base import *
+from .Account import *
 
 ########################################################################
 class BacktestingEngine(object):
@@ -74,7 +75,7 @@ class BacktestingEngine(object):
         self.capital = 100000       # 回测时的起始本金（默认10万）
         self.slippage = 0           # 回测时假设的滑点
         self.rate = 0               # 回测时假设的佣金比例（适用于百分比佣金）
-        self.size = 1               # 合约大小，默认为1    
+        self.size = 100             # 合约大小，默认为1    
         self.priceTick = 0          # 价格最小变动 
         
         self.dbClient = None        # 数据库客户端
@@ -276,8 +277,10 @@ class BacktestingEngine(object):
             
         if self.mode == self.BAR_MODE:
             self._execEndClose = self.bar.close
+            self._execEnd      = self.bar.date
         else:
             self._execEndClose = self.tick.priceTick
+            self._execEnd      = self.tick.date
 
         self.output(u'数据回放结束')
         
@@ -779,18 +782,13 @@ class BacktestingEngine(object):
         # 结算日
         # ---------------------------
         # 到最后交易日尚未平仓的交易，则以最后价格平仓
-        if self.mode == self.BAR_MODE:
-            endPrice = self.bar.close
-        else:
-            endPrice = self.tick.lastPrice
-            
         for trade in buyTrades:
-            result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
+            result = TradingResult(trade.price, trade.dt, self._execEndClose, self.dt, 
                                    trade.volume, self.rate, self.slippage, self.size)
             self.resultList.append(result)
             
         for trade in sellTrades:
-            result = TradingResult(trade.price, trade.dt, endPrice, self.dt, 
+            result = TradingResult(trade.price, trade.dt, self._execEndClose, self.dt, 
                                    -trade.volume, self.rate, self.slippage, self.size)
             self.resultList.append(result)
 
@@ -1187,6 +1185,8 @@ class BacktestingEngine(object):
         if df is None:
             df = self.calculateDailyResult()
             df, result = self.calculateDailyStatistics(df)
+
+        df.to_csv(self._BTestId+'.csv')
             
         originGain = 0.0
         if self._execStartClose >0 :
@@ -1223,7 +1223,7 @@ class BacktestingEngine(object):
         self.output(u'收益标准差：\t%s%%' % formatNumber(result['returnStd']))
         self.output(u'Sharpe Ratio：\t%s' % formatNumber(result['sharpeRatio']))
         
-        # self.plotDailyResult(df)
+        self.plotDailyResult(df)
 
     #----------------------------------------------------------------------
     def plotDailyResult(self, df):
@@ -1284,6 +1284,27 @@ class TradingResult(object):
                             - self.commission - self.slippage)                   # 净盈亏
 
 
+#----------------------------------------------------------------------
+def amountOfTrade(trade, size, slippage=0, rate=3/1000) :
+    # 交易手续费=印花税+过户费+券商交易佣金
+    volumeX1 = abs(trade.volume) * size
+    turnOver = trade.price * volumeX1
+
+    # 印花税: 成交金额的1‰ 。目前向卖方单边征收
+    tax = 0
+    if volumeX1 <0:
+        tax = turnOver /1000
+        
+    #过户费（仅上海收取，也就是买卖上海股票时才有）：每1000股收取1元，不足1000股按1元收取
+    transfer =0
+    if len(trade.symbol)>2 and (trade.symbol[1]=='6' or trade.symbol[1]=='7'):
+        transfer = int((volumeX1+999)/1000)
+        
+    #3.券商交易佣金 最高为成交金额的3‰，最低5元起，单笔交易佣金不满5元按5元收取。
+    commission = max(turnOver * rate, 5)
+
+    return turnOver, tax + transfer + commission, volumeX1 * slippage
+
 ########################################################################
 class DailyResult(object):
     """每日交易的结果"""
@@ -1339,9 +1360,10 @@ class DailyResult(object):
                 
             self.tradingPnl += posChange * (self.closePrice - trade.price) * size
             self.closePosition += posChange
-            self.turnover += trade.price * trade.volume * size
-            self.commission += trade.price * trade.volume * size * rate
-            self.slippage += trade.volume * size * slippage
+            turnover, commission, slippagefee = amountOfTrade(trade, size, slippage, rate)
+            self.turnover += turnover
+            self.commission += commission
+            self.slippage += slippagefee
         
         # 汇总
         self.totalPnl = self.tradingPnl + self.positionPnl

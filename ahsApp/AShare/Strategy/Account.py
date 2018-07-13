@@ -30,26 +30,6 @@ from vnpy.trader.vtGateway import VtOrderData, VtTradeData
 
 from .Base import *
 
-#----------------------------------------------------------------------
-def calculateFee(symbol, price, volumeX1, rate=3/10000):
-    # 交易手续费=印花税+过户费+券商交易佣金
-    turnOver = price * abs(volumeX1)
-    
-    # 印花税: 成交金额的1‰ 。目前向卖方单边征收
-    tax = 0
-    if volumeX1 >0:
-        tax = turnOver /1000
-        
-    #过户费（仅上海收取，也就是买卖上海股票时才有）：每1000股收取1元，不足1000股按1元收取
-    transfer =0
-    if symbol[1]=='6' or symbol[1]=='7':
-        transfer = int((volumeX1+999)/1000)
-        
-    #3.券商交易佣金 最高为成交金额的3‰，最低5元起，单笔交易佣金不满5元按5元收取。
-    commission = max(turnOver * rate, 5)
-
-    return tax + transfer + commission
-
 ########################################################################
 class Account(object):
     """

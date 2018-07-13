@@ -61,7 +61,7 @@ def backTestSymbol(symbol, startDate):
 
     # 设置产品相关参数
     engine.setSlippage(0.2)     # 股指1跳
-    engine.setRate(0.3/10000)   # 万0.3
+    engine.setRate(30/10000)   # 万30
     engine.setSize(100)         # 股指合约大小 
     engine.setPriceTick(0.2)    # 股指最小价格变动
     
@@ -71,7 +71,7 @@ def backTestSymbol(symbol, startDate):
     
     # 在引擎中创建策略对象
     d = {}
-    strategyList = [BollChannelStrategy, KkStrategy]
+    strategyList = [BollChannelStrategy] # , KkStrategy]
     engine.batchBacktesting(strategyList, d)
     # engine.initStrategy(KkStrategy, d)
     
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     for s in symbols :
         try:
             gc.collect()
-            backTestSymbol('A'+s, '20110101')
+            backTestSymbol('A'+s, '20121201')
             #backTestSymbolByAllStategy('A'+s, '20110101')
         except OSError, e:
             pass

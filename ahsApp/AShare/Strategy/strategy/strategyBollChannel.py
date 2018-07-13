@@ -50,7 +50,7 @@ class BollChannelStrategy(AShTemplate):
     atrWindow = 30                      # ATR窗口数
     slMultiplier = 5.2                  # 计算止损距离的乘数
     initDays = 10                       # 初始化数据所用的天数
-    fixedSize = 2000                       # 每次交易的数量
+    fixedSize = 20                      # 每次交易的数量/手
 
     # 策略变量
     bollUp = 0                          # 布林通道上轨
@@ -148,6 +148,9 @@ class BollChannelStrategy(AShTemplate):
 
         # 全撤之前发出的委托
         self.cancelAll()
+
+        if self.ashEngine.capital <0:
+            return
     
         # 保存K线数据
         am = self.am
@@ -161,35 +164,80 @@ class BollChannelStrategy(AShTemplate):
         self._lastCCI = self.cciValue
         self._lastATR = self.atrValue
 
-        self.bollUp, self.bollDown = am.boll(self.bollWindow, self.bollDev)
+        toBuy=0
+        toSell=0
+
+        bollUp, bollDown = am.boll(self.bollWindow, self.bollDev)
+        bollMean = (self.bollUp + self.bollDown) /2
+        
+        # https://baike.baidu.com/item/%E5%B8%83%E6%9E%97%E7%BA%BF%E6%8C%87%E6%A0%87
+        if bollUp >self.bollUp and bollDown > self.bollDown : 
+            # 当布林线的上、中、下轨线同时向上运行时，表明股价强势特征非常明显，股价短期内将继续上涨，投资者应坚决持股待涨或逢低买入
+            toBuy +=1
+        elif bollUp <self.bollUp and bollDown < self.bollDown :
+            # 当布林线的上、中、下轨线同时向下运行时，表明股价的弱势特征非常明显，股价短期内将继续下跌，投资者应坚决持币观望或逢高卖出。
+            toSell +=1
+
+        # 开口型喇叭口形态的形成必须具备两个条件。其一，是股价要经过长时间的中低位横盘整理，整理时间越长、上下轨之间的距离越小则未来涨升的幅度越大；其二，是布林线开始开口时要有明显的大的成交量出现。
+        if (bollUp -bollDown) >(self.bollUp-self.bollDown)*1.1 :
+            toBuy +=1 
+
+        # 收口型喇叭口形态的形成虽然对成交量没有要求，但它也必须具备一个条件，即股价经过前期大幅的短线拉升，拉升的幅度越大、上下轨之间的距离越大则未来下跌幅度越大。
+        if (bollUp -bollDown) <(self.bollUp-self.bollDown)*0.9 :
+            toBuy =0
+            toSell +=1
+
+        (self.bollUp, self.bollDown) = (bollUp, bollDown)
+
         self.cciValue = am.cci(self.cciWindow)
         self.atrValue = am.atr(self.atrWindow)
 
         dCCI = self.cciValue - self._lastCCI
         dATR = self.atrValue - self._lastATR
+
+        if dCCI >0 and self.cciValue > 100:
+            toBuy +=1
+            toSell -=1
+        if dCCI <0 and self.cciValue < 100:
+            toSell +=1
+        if dCCI <0 and self.cciValue < 0:
+            toBuy  =0
         
+
         # 判断是否要进行交易
     
-        # 当前无仓位，发送Buy委托
         barDesc = '%.2f,%.2f,%.2f,%.2f' % (bar.open, bar.close, bar.high, bar.low)
         measureDesc = 'boll[%.2f~%.2f] cci[%d->%d] atr:%.2f' % (self.bollDown, self.bollUp, self._lastCCI, self.cciValue, self.atrValue)
 
-        if self.pos <= 0:
-            self.intraTradeHigh = bar.high
-            self.intraTradeLow  = bar.low            
+        if toBuy - toSell>0 :
+            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing buy' %(self.pos, barDesc, measureDesc))
+            # self.buy(self.bollUp, self.fixedSize, False)
+            self.buy(bar.close+0.01, self.fixedSize*toBuy, False)
+        elif self.pos>0 and toSell - toBuy >0 :
+            self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing sell' %(self.pos, barDesc, measureDesc))
+            # self.sell(self.longStop, abs(self.pos), False)
+            self.sell(bar.close-0.01, self.fixedSize*toSell, False) # abs(self.pos), False)
+
+
+        # # 当前无仓位，发送Buy委托
+        # if self.pos <= 0:
+        #     # self.intraTradeHigh = bar.high
+        #     # self.intraTradeLow  = bar.low            
             
-            if dATR >0 and self.cciValue > 100:
-                self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing buy' %(self.pos, barDesc, measureDesc))
-                self.buy(self.bollUp, self.fixedSize, False)
+        #     if dATR >0 and self.cciValue > 100:
+        #         self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing buy' %(self.pos, barDesc, measureDesc))
+        #         # self.buy(self.bollUp, self.fixedSize, False)
+        #         self.buy(bar.close+0.01, self.fixedSize, False)
             
-        else : # 持有仓位
-            self.intraTradeHigh = max(self.intraTradeHigh, bar.high)
-            self.intraTradeLow  = bar.low
-            self.longStop       = self.intraTradeHigh - self.atrValue * self.slMultiplier
+        # else : # 持有仓位
+        #     self.intraTradeHigh = max(self.intraTradeHigh, bar.high)
+        #     self.intraTradeLow  = bar.low
+        #     self.longStop       = self.intraTradeHigh - self.atrValue * self.slMultiplier
                 
-            if dATR <0 and self.cciValue < 100 and self._lastCCI >100:
-                self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing sell' %(self.pos, barDesc, measureDesc))
-                self.sell(self.longStop, abs(self.pos), False)
+        #     if dATR <0 and self.cciValue < 100 and self._lastCCI >100:
+        #         self.logBT(u'onXminBar() pos[%s] bar[%s] %s => issuing sell' %(self.pos, barDesc, measureDesc))
+        #         # self.sell(self.longStop, abs(self.pos), False)
+        #         self.sell(bar.close-0.01, abs(self.pos), False)
     
         # 同步数据到数据库
         self.saveSyncData()        
