@@ -189,3 +189,7 @@ class AtrRsiStrategy(AShTemplate):
     def onStopOrder(self, so):
         """停止单推送"""
         pass
+
+    #----------------------------------------------------------------------
+    def onDayOpen(self, date):
+        pass

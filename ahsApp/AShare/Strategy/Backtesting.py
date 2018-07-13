@@ -1054,7 +1054,7 @@ class BacktestingEngine(object):
         # 遍历优化
         self.resultList =[]
         for setting in settingList:
-            self.clearBacktestingResult()
+            self.clearBackTesting()
             self.output('-' * 30)
             self.output('setting: %s' %str(setting))
             self.initStrategy(strategyClass, setting)
@@ -1065,15 +1065,15 @@ class BacktestingEngine(object):
                 targetValue = d[targetName]
             except KeyError:
                 targetValue = 0
-            resultList.append(([str(setting)], targetValue, d))
+            self.resultList.append(([str(setting)], targetValue, d))
         
         # 显示结果
-        resultList.sort(reverse=True, key=lambda result:result[1])
+        self.resultList.sort(reverse=True, key=lambda result:result[1])
         self.output('-' * 30)
         self.output(u'优化结果：')
-        for result in resultList:
+        for result in self.resultList:
             self.output(u'参数：%s，目标：%s' %(result[0], result[1]))    
-        return resultList
+        return self.resultList
             
     #----------------------------------------------------------------------
     def runParallelOptimization(self, strategyClass, optimizationSetting):
