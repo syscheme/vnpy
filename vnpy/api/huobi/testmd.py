@@ -54,8 +54,14 @@ from vnhuobi import DataApi
 api = DataApi()
 api.init(api.HUOBI, 'localhost', 8118)
 api.connect()
-#api.subscribeMarketDepth('ethusdt')
-#api.subscribeTradeDetail('ethusdt')
-#api.subscribeMarketDetail('ethusdt')
-api.subscribeKline('eosusdt', 300)
+api.subscribeMarketDepth('btcusdt',2)
+api.subscribeMarketDepth('eosbtc',2)
+api.subscribeMarketDepth('eosusdt',2)
+api.subscribeMarketDepth('ethusdt',2)
+api.subscribeMarketDepth('eoseth',2)
+# not available api.subscribeMarketDepth('btceth',2)
+
+api.subscribeTradeDetail('eosusdt')
+api.subscribeKline('eosusdt', 1)
+
 input()

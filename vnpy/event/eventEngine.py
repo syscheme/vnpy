@@ -12,6 +12,8 @@ from qtpy.QtCore import QTimer
 # 自己开发的模块
 from .eventType import *
 
+import traceback
+
 
 ########################################################################
 class EventEngine(object):
@@ -215,8 +217,9 @@ class EventEngine2(object):
         while self.__active == True:
             try:
                 event = self.__queue.get(block = True, timeout = 1)  # 获取事件的阻塞时间设为1秒
-                self.__process(event)
-            except Empty:
+                if event :
+                    self.__process(event)
+            except Exception:
                 pass
             
     #----------------------------------------------------------------------
@@ -225,15 +228,19 @@ class EventEngine2(object):
         # 检查是否存在对该事件进行监听的处理函数
         if event.type_ in self.__handlers:
             # 若存在，则按顺序将事件传递给处理函数执行
-            [handler(event) for handler in self.__handlers[event.type_]]
+            for handler in self.__handlers[event.type_] :
+                try:
+                    handler(event)
+                except Exception as ex:
+                    print(ex)
             
-            # 以上语句为Python列表解析方式的写法，对应的常规循环写法为：
-            #for handler in self.__handlers[event.type_]:
-                #handler(event) 
-                
         # 调用通用处理函数进行处理
         if self.__generalHandlers:
-            [handler(event) for handler in self.__generalHandlers]        
+            for handler in self.__generalHandlers :
+                try:
+                    handler(event)
+                except Exception as ex:
+                    print(ex)
                
     #----------------------------------------------------------------------
     def __runTimer(self):

@@ -581,8 +581,10 @@ class DataApi(object):
         try:
             if self.proxyHost :
                 self.ws = create_connection(self.url, http_proxy_host=self.proxyHost, http_proxy_port=self.proxyPort)
+                self.debug('CONN:%s thru{%s:%s}' % (self.url, self.proxyHost, self.proxyPort))
             else :
                 self.ws = create_connection(self.url)
+                self.debug('CONN:%s' % (self.url))
 
             return True
 
@@ -619,10 +621,16 @@ class DataApi(object):
             self.ws.close()
         
     #----------------------------------------------------------------------
+    def debug(self, msg):
+        """错误推送"""
+        print (msg)
+
+    #----------------------------------------------------------------------
     def sendReq(self, req):
         """发送请求"""
         stream = json.dumps(req)
         self.ws.send(stream)            
+        self.debug('SENT:%s' % stream)
         
     #----------------------------------------------------------------------
     def pong(self, data):
@@ -727,6 +735,7 @@ class DataApi(object):
     #----------------------------------------------------------------------
     def onData(self, data):
         """数据推送"""
+        self.debug('RECV:%s' % data)
         if 'ping' in data:
             self.pong(data)
         elif 'ch' in data:
